@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import MainLayout from "~/components/layouts/main-layout";
+import Navigation from "~/components/navigation";
 import { useWebSocketContext } from "~/lib/websocket";
 import { apiClient, type ChatMessage, type ChatSession } from "~/lib/api-client";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "~/components/ui/card";
@@ -146,9 +147,12 @@ export default function ChatPage() {
 
   return (
     <MainLayout>
-      <div className="flex flex-col h-[calc(100vh-12rem)]">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold">Chat</h1>
+      <div className="container mx-auto p-6">
+        <Navigation />
+        
+        <div className="flex flex-col h-[calc(100vh-20rem)]">
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-2xl font-bold">System Demo Chat</h1>
           <div className="flex items-center space-x-2">
             <Select 
               value={currentSession?.id} 
@@ -239,11 +243,12 @@ export default function ChatPage() {
           </CardFooter>
         </Card>
         
-        {!isConnected && (
-          <div className="mt-2 text-sm text-orange-500 dark:text-orange-400">
-            WebSocket disconnected. Some features may be unavailable.
-          </div>
-        )}
+          {!isConnected && (
+            <div className="mt-2 text-sm text-orange-500 dark:text-orange-400">
+              WebSocket disconnected. Some features may be unavailable.
+            </div>
+          )}
+        </div>
       </div>
     </MainLayout>
   );

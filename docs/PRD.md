@@ -118,17 +118,15 @@ AutoLearn is implemented in **Python** with **OpenAI models** for reasoning and 
    - Skill viewer and MCP spec viewer.  
 
 4. **User Mode**
-   - User requests new skill.  
-   - AutoLearn generates and crystalizes code.  
-   - Frontend displays skill + MCP spec.  
-   - Skill executes successfully.
+   - User can manually request a new skill to be created.
+   - AutoLearn generates and crystalizes code into persistent skill.
+   - Frontend can display skill (including code) + updated MCP spec.
+   - User can then prompt the frontend chat to use the new skill, which executes successfully.
+   - This requires an AI consumer agent that uses MCP to connect to AutoLearn.
+   - In the future, the Consumer Agent can be configured to send recent reasoning to AutoLearn automatically
+   - AutoLearn then crystalizes code for a recent run and presents it as a new hardcoded skill for future runs.
 
-5. **Agentic Mode**
-   - Create an AI consumer agentthat uses MCP to connect to AutoLearn.
-   - The Consumer Agent is configured to send recent reasoning to AutoLearn automatically
-   - AutoLearn then crystalizes code for a recent run and presents it as a new hardcoded skill.
-
-6. **End to end Demo**
+5. **End to end Demo Test**
    - A user prompts the Consumer Agent for something that doesn't exist in AutoLearn
    - The Consumer Agent then reasons through it
    - The Consumer Agent sends the run to AutoLearn

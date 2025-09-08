@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import json
 import logging
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Dict
 from datetime import datetime
 
 # Load environment variables from .env file
@@ -30,7 +30,16 @@ from .schemas import (
     CreateSessionRequest,
     CreateSessionResponse,
     AddMessageRequest,
-    AddMessageResponse
+    AddMessageResponse,
+    # Consumer Agent schemas
+    ChatRequest,
+    ChatResponse,
+    SkillSuggestionsRequest,
+    SkillSuggestionsResponse,
+    AgentSkillGenerationRequest,
+    AgentSkillGenerationResponse,
+    ConversationHistoryResponse,
+    SkillSuggestion
 )
 from .skill_engine import (
     SkillEngine, 
@@ -46,6 +55,7 @@ from . import websocket
 from . import sessions
 from . import db
 from .mcp_protocol import MCPProtocolHandler
+from .consumer_agent import ConsumerAgent, get_consumer_agent, ConversationContext, SkillSuggestion
 
 logger = logging.getLogger("autolearn")
 
@@ -440,3 +450,216 @@ async def delete_skill(
     except Exception as e:
         logger.exception(f"Error unregistering skill: {name}")
         raise HTTPException(status_code=500, detail=f"Error unregistering skill: {str(e)}")
+
+
+# Consumer Agent endpoints
+
+@app.post("/consumer-agent/chat")
+async def chat_with_agent(
+    request: ChatRequest,
+    agent: ConsumerAgent = Depends(get_consumer_agent)
+) -> ChatResponse:
+    """Send a message to the consumer agent and get a response."""
+    
+    try:
+        # Start new session if none provided
+        session_id = request.session_id
+        if not session_id:
+            session_id = await agent.start_conversation()
+            
+        # Process the chat message
+        result = await agent.chat(session_id, request.message)
+        
+        return ChatResponse(
+            message=result["message"],
+            session_id=result.get("session_id", session_id),
+            actions=result.get("actions", []),
+            suggestions=result.get("suggestions", []),
+            needs_skill_generation=result.get("needs_skill_generation", False)
+        )
+        
+    except Exception as e:
+        logger.error(f"Chat error: {e}")
+        raise HTTPException(status_code=500, detail=f"Chat processing failed: {str(e)}")
+
+
+@app.get("/consumer-agent/skills/suggestions")
+async def get_skill_suggestions(
+    query: str,
+    session_id: Optional[str] = None,
+    agent: ConsumerAgent = Depends(get_consumer_agent)
+) -> SkillSuggestionsResponse:
+    """Get skill suggestions based on user query."""
+    
+    try:
+        # For now, we'll use the MCP client to get available tools and suggest from those
+        from .consumer_agent import MCPClient
+        
+        async with MCPClient(agent.mcp_server_url) as mcp:
+            available_tools = await mcp.list_tools()
+            suggestions = await agent._get_skill_suggestions(query, available_tools)
+            
+        return SkillSuggestionsResponse(suggestions=suggestions)
+        
+    except Exception as e:
+        logger.error(f"Skill suggestions error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get suggestions: {str(e)}")
+
+
+@app.get("/consumer-agent/skills/available")
+async def get_available_skills(
+    agent: ConsumerAgent = Depends(get_consumer_agent)
+) -> Dict[str, Any]:
+    """Get list of skills available via MCP."""
+    
+    try:
+        from .consumer_agent import MCPClient
+        
+        async with MCPClient(agent.mcp_server_url) as mcp:
+            tools = await mcp.list_tools()
+            
+        return {
+            "tools": tools,
+            "count": len(tools),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Available skills error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get available skills: {str(e)}")
+
+
+@app.post("/consumer-agent/skills/execute")
+async def execute_skill(
+    skill_name: str,
+    arguments: Dict[str, Any],
+    session_id: Optional[str] = None,
+    agent: ConsumerAgent = Depends(get_consumer_agent)
+) -> Dict[str, Any]:
+    """Execute a skill through MCP protocol."""
+    
+    try:
+        from .consumer_agent import MCPClient
+        
+        async with MCPClient(agent.mcp_server_url) as mcp:
+            result = await mcp.call_tool(skill_name, arguments)
+            
+        # Update conversation context if session provided
+        if session_id and session_id in agent.conversations:
+            context = agent.conversations[session_id]
+            if skill_name not in context.skills_used:
+                context.skills_used.append(skill_name)
+                
+        return {
+            "success": True,
+            "result": result,
+            "skill_name": skill_name,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Skill execution error: {e}")
+        raise HTTPException(status_code=500, detail=f"Skill execution failed: {str(e)}")
+
+
+@app.post("/consumer-agent/skills/request")
+async def request_skill_generation(
+    request: AgentSkillGenerationRequest,
+    agent: ConsumerAgent = Depends(get_consumer_agent)
+) -> AgentSkillGenerationResponse:
+    """Request generation of a new skill."""
+    
+    try:
+        result = await agent.request_skill_generation(
+            request.session_id,
+            request.description,
+            request.name
+        )
+        
+        return AgentSkillGenerationResponse(**result)
+        
+    except Exception as e:
+        logger.error(f"Skill generation request error: {e}")
+        raise HTTPException(status_code=500, detail=f"Skill generation request failed: {str(e)}")
+
+
+@app.get("/consumer-agent/conversation/{session_id}")
+async def get_conversation_history(
+    session_id: str,
+    agent: ConsumerAgent = Depends(get_consumer_agent)
+) -> ConversationHistoryResponse:
+    """Get conversation history for a session."""
+    
+    context = agent.get_conversation_history(session_id)
+    
+    if not context:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+        
+    # Convert messages to dict format
+    messages = []
+    for msg in context.messages:
+        messages.append({
+            "role": msg.role,
+            "content": msg.content,
+            "timestamp": msg.timestamp.isoformat(),
+            "metadata": msg.metadata
+        })
+        
+    return ConversationHistoryResponse(
+        session_id=context.session_id,
+        messages=messages,
+        skills_used=context.skills_used,
+        skills_requested=context.skills_requested
+    )
+
+
+@app.get("/consumer-agent/reasoning/{session_id}")
+async def get_agent_reasoning(
+    session_id: str,
+    agent: ConsumerAgent = Depends(get_consumer_agent)
+) -> Dict[str, Any]:
+    """Get agent reasoning traces for a session."""
+    
+    context = agent.get_conversation_history(session_id)
+    
+    if not context:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    # Extract reasoning information from conversation
+    reasoning_traces = []
+    for msg in context.messages:
+        if msg.role == "assistant" and msg.metadata:
+            reasoning_traces.append({
+                "timestamp": msg.timestamp.isoformat(),
+                "content": msg.content,
+                "metadata": msg.metadata
+            })
+            
+    return {
+        "session_id": session_id,
+        "reasoning_traces": reasoning_traces,
+        "skills_used": context.skills_used,
+        "skills_requested": context.skills_requested
+    }
+
+
+@app.post("/consumer-agent/sessions/start")
+async def start_new_agent_session(
+    user_id: str = "default",
+    agent: ConsumerAgent = Depends(get_consumer_agent)
+) -> Dict[str, Any]:
+    """Start a new conversation session with the consumer agent."""
+    
+    try:
+        session_id = await agent.start_conversation(user_id)
+        
+        return {
+            "session_id": session_id,
+            "user_id": user_id,
+            "timestamp": datetime.now().isoformat(),
+            "status": "active"
+        }
+        
+    except Exception as e:
+        logger.error(f"Session start error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start session: {str(e)}")
