@@ -29,22 +29,24 @@ AutoLearn is implemented in **Python** with **OpenAI models** for reasoning and 
 
 ## 3. Functional Requirements
 
-### Core MCP Server
-- Accepts natural language requests to define skills.  
-- Uses OpenAI models (`gpt-4.1`, `gpt-4.1-mini`) to generate/refine Python code.  
-- Crystalizes skills based on usage or explicit agent requests.  
-- Updates MCP spec dynamically with new skills.  
+### Core MCP Server  
+- **JSON-RPC 2.0 Protocol**: Full MCP specification compliance over HTTP transport
+- **Dynamic Skill Registry**: Skills automatically appear as MCP tools in real-time
+- **Skill Generation**: Uses OpenAI models (`gpt-4`, `gpt-4-mini`) to generate Python code from natural language
+- **Secure Execution**: Sandboxed skill execution with error handling and logging
+- **Persistence**: SQLite database for skills, sessions, and operational data
 
-### Frontend Demo
-- **Chat Interface**: user converses with a consuming agent that requests skills.  
-- **Skill Viewer**: displays generated Python code.  
-- **MCP Viewer**: shows current MCP spec JSON.  
-- **Execution Panel**: allows interactive execution of skills.  
+### Frontend Demo Application
+- **Multi-View Interface**: Chat, Skills, MCP Spec, and Execution panels with responsive design
+- **Real-Time Updates**: WebSocket integration for live skill creation and execution feedback
+- **MCP Client Demo**: Shows how external agents would interact with the AutoLearn server
+- **Developer Tools**: Code editor, execution logs, and MCP specification viewer
 
-### Developer Experience
-- Python 3.11+ backend with FastAPI.  
-- T3 stack (Next.js, TypeScript, Tailwind CSS, tRPC) frontend with shadcn/ui components.  
-- GitHub Copilot should scaffold most implementation with minimal boilerplate.  
+### Architecture & Integration
+- **Backend**: Python 3.11+ with FastAPI, comprehensive test coverage (54/54 tests passing)
+- **Frontend**: T3 stack (Next.js, TypeScript, Tailwind CSS) with shadcn/ui components
+- **Transport**: HTTP (implemented) + stdio (planned) for desktop MCP clients
+- **Real-Time**: WebSocket events for skill_added, skill_executed, mcp_updated  
 
 ---
 

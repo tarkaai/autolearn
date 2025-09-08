@@ -16,48 +16,47 @@
 - [x] **Skill Engine Integration**: Existing skills automatically appear as MCP tools
 - [x] **Error Handling**: Proper MCP error codes and JSON-RPC error responses
 
-## 🎯 NEXT MILESTONE - Frontend Integration & Polish
+## 🎯 NEXT PHASE - Beyond Milestone 3
 
-### 📋 HIGH PRIORITY - MCP Client Integration
-- [ ] **Frontend MCP Client**
-  - [ ] Replace chat interface with proper MCP client demo
-  - [ ] MCP server connection status and health monitoring
-  - [ ] Real-time tool discovery and execution interface
-  - [ ] Visual skill code viewer with syntax highlighting
-  - [ ] Tool execution results display with proper formatting
+### 📋 HIGH PRIORITY - MCP Client Ecosystem 
+- [ ] **stdio Transport** (for desktop MCP clients like Claude Desktop)
+  - [ ] Add command line flag: `--transport stdio|http` 
+  - [ ] Implement JSON-RPC over stdio alongside HTTP transport
+  - [ ] Test with Claude Desktop and other MCP clients
+  - [ ] Update documentation for MCP client connection
 
-- [ ] **MCP Enhancement Features** 
-  - [ ] Add stdio transport for desktop MCP clients (Claude Desktop, etc.)
-  - [ ] Command line flag: `--transport stdio|http` 
-  - [ ] Skill generation exposed as MCP tool (meta-capability)
+- [ ] **Meta-Capabilities** (MCP inception)
+  - [ ] Expose skill generation itself as an MCP tool
   - [ ] MCP resource endpoints for skill documentation/code
+  - [ ] Self-improving capabilities via skill-generated skills
 
-### 📋 MEDIUM PRIORITY - Architecture Cleanup
-- [ ] **Remove Legacy Chat Components**
-  - [ ] Remove `backend/session_endpoints.py` (not MCP compliant)
-  - [ ] Clean up OpenAI function calling remnants  
-  - [ ] Keep OpenAI integration only for skill generation
-  - [ ] Update frontend to be MCP client, not chat assistant
-
-- [ ] **Security & Sandboxing**
-  - [ ] Improve sandbox security (currently direct execution)
-  - [ ] Add resource limits for skill execution
-  - [ ] Input validation and sanitization
+### 📋 MEDIUM PRIORITY - Production Features
+- [ ] **Enhanced Security & Sandboxing**
+  - [ ] Replace direct execution with proper process isolation
+  - [ ] Add resource limits for skill execution (CPU, memory, time)
+  - [ ] Input validation and sanitization improvements
   - [ ] Execution timeouts and error recovery
+  - [ ] Audit logs for all skill operations
+
+- [ ] **Architecture Improvements**
+  - [ ] Remove `backend/session_endpoints.py` (legacy chat endpoints)
+  - [ ] Streamline frontend to focus on MCP capabilities
+  - [ ] Add skill versioning and rollback capabilities
+  - [ ] Implement skill dependency management
 
 ### 📋 LOW PRIORITY - Extended Features
-- [ ] **MCP Client Testing**
-  - [ ] Test with Claude Desktop MCP client via stdio transport
-  - [ ] Create comprehensive MCP client test harness
-  - [ ] Performance testing with multiple concurrent clients
-  - [ ] Validate MCP protocol edge cases and error conditions
+- [ ] **Multi-User & Scaling**
+  - [ ] User authentication and authorization
+  - [ ] Multi-tenant skill isolation
+  - [ ] Skill sharing and marketplace features
+  - [ ] Performance optimizations for large skill libraries
 
-- [ ] **Production Readiness**
-  - [ ] Enhanced logging with structured MCP context
-  - [ ] Configuration management (environment-based settings)
-  - [ ] Health check endpoints for monitoring
+- [ ] **Developer Experience**
+  - [ ] API documentation generation (OpenAPI/Swagger)
+  - [ ] SDK generation for multiple languages
   - [ ] Docker containerization for deployment
-  - [ ] Documentation and API reference generation
+  - [ ] CI/CD pipeline with automated testing
+  - [ ] Monitoring and observability dashboard
 
 ## � CURRENT SYSTEM STATUS
 
@@ -109,22 +108,22 @@
 - **Performance**: Caching and optimization for large skill libraries
 - **Monitoring**: Health checks, metrics, and observability
 
-## 🎯 NEXT ACTIONS SUMMARY
+## 🎯 DEVELOPMENT ROADMAP
 
-### 🚀 IMMEDIATE NEXT STEPS (Week 1)
-1. **Frontend Transformation**: Convert React frontend from chat interface to MCP client demo
-2. **Stdio Transport**: Add command-line stdio mode for desktop MCP clients  
-3. **Architecture Cleanup**: Remove legacy chat endpoints and OpenAI function calling remnants
+### 🚀 IMMEDIATE NEXT STEPS (Week 1-2)
+1. **stdio Transport**: Enable desktop MCP clients (Claude Desktop, etc.)
+2. **Meta-Capabilities**: Expose skill generation as an MCP tool  
+3. **Documentation**: Complete API reference and deployment guides
 
-### 🎨 DEVELOPMENT GOALS (Week 2-3)  
-1. **Enhanced Demo**: Visual tool discovery, execution results, skill code viewer
-2. **Security Hardening**: Improve sandbox isolation and add execution limits
-3. **Meta-Capabilities**: Expose skill generation as an MCP tool itself
+### 🎨 ENHANCEMENT PHASE (Month 2)  
+1. **Security Hardening**: Process isolation, resource limits, audit logs
+2. **Architecture Cleanup**: Remove legacy chat components, add versioning
+3. **Performance**: Multi-client support, caching, optimization
 
-### 🧪 TESTING & VALIDATION (Week 4)
-1. **Desktop Integration**: Test with Claude Desktop and other MCP clients
-2. **Performance Testing**: Multi-client concurrent access and load testing  
-3. **Documentation**: API reference, deployment guides, developer documentation
+### 🧪 PRODUCTION PHASE (Month 3)
+1. **Multi-User**: Authentication, authorization, tenant isolation
+2. **DevOps**: Docker, CI/CD, monitoring, observability
+3. **Ecosystem**: SDK generation, marketplace, community features
 
 ## 📚 REFERENCES & RESOURCES
 - **MCP Specification**: https://modelcontextprotocol.io/
