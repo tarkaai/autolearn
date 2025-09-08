@@ -28,8 +28,8 @@ The project includes a **frontend demo app** where users can:
 ## Tech Stack
 
 - **Backend**: Python 3.11+, FastAPI, OpenAI API  
-- **Frontend**: React, Tailwind CSS  
-- **Testing**: Pytest (backend), Jest/React Testing Library (frontend)  
+- **Frontend**: T3 Stack (Next.js, TypeScript, Tailwind CSS, tRPC) with shadcn/ui components  
+- **Testing**: Pytest (backend), Vitest (frontend)  
 
 ---
 
@@ -42,6 +42,11 @@ autolearn/
 │   ├── schemas.py    # Pydantic models
 │   ├── skill_engine.py # Skill registry and execution
 │   └── openai_client.py # OpenAI integration
+├── frontend/         # T3 Stack frontend (Next.js, TypeScript, Tailwind, tRPC)
+│   ├── src/          # Source code
+│   │   ├── components/   # UI components using shadcn/ui
+│   │   ├── pages/    # Next.js pages
+│   │   └── server/   # tRPC router definitions
 ├── tests/            # Unit and integration tests
 ├── docs/             # Documentation (PRD, design notes)
 ├── skills.db         # SQLite database for skill persistence
@@ -90,6 +95,20 @@ uvicorn backend.app:app --reload
 ```
 
 The API will be available at http://localhost:8000
+
+### 5. Frontend Setup
+```bash
+# Navigate to the frontend directory
+cd frontend
+
+# Install dependencies
+npm install
+
+# Start the development server
+npm run dev
+```
+
+The frontend will be available at http://localhost:3000
 
 ---
 

@@ -43,7 +43,7 @@ AutoLearn is implemented in **Python** with **OpenAI models** for reasoning and 
 
 ### Developer Experience
 - Python 3.11+ backend with FastAPI.  
-- React + Tailwind frontend.  
+- T3 stack (Next.js, TypeScript, Tailwind CSS, tRPC) frontend with shadcn/ui components.  
 - GitHub Copilot should scaffold most implementation with minimal boilerplate.  
 
 ---
@@ -57,7 +57,8 @@ AutoLearn is implemented in **Python** with **OpenAI models** for reasoning and 
   - Registry stored in SQLite database for persistent storage between server restarts.  
 
 - **Frontend**  
-  - React app with chat, code viewer, MCP viewer, and execution panel.  
+  - T3 stack (Next.js, TypeScript, Tailwind CSS, tRPC) application with shadcn/ui components.
+  - Feature-rich UI with chat, code viewer, MCP viewer, and execution panel.  
   - WebSocket/HTTP connection to backend for real-time updates.  
 
 - **OpenAI Integration**  
@@ -114,10 +115,29 @@ AutoLearn is implemented in **Python** with **OpenAI models** for reasoning and 
    - Chat panel connected to backend.  
    - Skill viewer and MCP spec viewer.  
 
-4. **End-to-End Demo**  
+4. **User Mode**
    - User requests new skill.  
    - AutoLearn generates and crystalizes code.  
    - Frontend displays skill + MCP spec.  
-   - Skill executes successfully.  
+   - Skill executes successfully.
+
+5. **Agentic Mode**
+   - Create an AI consumer agentthat uses MCP to connect to AutoLearn.
+   - The Consumer Agent is configured to send recent reasoning to AutoLearn automatically
+   - AutoLearn then crystalizes code for a recent run and presents it as a new hardcoded skill.
+
+6. **End to end Demo**
+   - A user prompts the Consumer Agent for something that doesn't exist in AutoLearn
+   - The Consumer Agent then reasons through it
+   - The Consumer Agent sends the run to AutoLearn
+   - AutoLearn does its thing
+   - The user runs the same prompt again
+   - The consumer agent then runs AutoLearn's reasoned skill
+   - The result is deterministic and performant
+
+7. **Demo helpers**
+   - Create 3 different examples of complex reasoned workflow prompts that would be best improved by using AutoLearn (these shouldn't use authenticated APIs as that'll require a lot more setup than we need for this demo)
+   - Add these as smart examples in the frontend app to demo functionality
+   - Add a way to 'reset' the skill server from the frontend to easily run through the demo multiple times
 
 ---

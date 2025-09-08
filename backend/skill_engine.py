@@ -7,15 +7,14 @@ import inspect
 import json
 import logging
 import os
-import sqlite3
 import traceback
 import uuid
 from importlib.machinery import ModuleSpec
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from pydantic import BaseModel
-
+from . import db
+from . import sandbox
 from .schemas import SkillMeta
 
 
@@ -41,59 +40,27 @@ class SkillEngine:
     so skills are saved between server restarts.
     """
 
-    def __init__(self, db_path: str = "skills.db") -> None:
+    def __init__(self) -> None:
         self._registry: Dict[str, Tuple[SkillMeta, Callable[..., Any]]] = {}
         self._modules: Dict[str, Any] = {}  # Keep references to loaded modules
-        self.db_path = db_path
         
-        # Initialize the database
-        self._init_db()
-        
-        # Load any existing skills from the database
+        # Load skills from database
         self._load_skills_from_db()
-
-    def _init_db(self) -> None:
-        """Initialize the SQLite database with the necessary tables."""
-        conn = sqlite3.connect(self.db_path)
-        try:
-            cursor = conn.cursor()
-            # Create skills table if it doesn't exist
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS skills (
-                    name TEXT PRIMARY KEY,
-                    code TEXT NOT NULL,
-                    meta TEXT NOT NULL
-                )
-            ''')
-            conn.commit()
-            logger.info(f"Initialized skill database at {self.db_path}")
-        except Exception as e:
-            logger.error(f"Error initializing database: {str(e)}")
-            raise
-        finally:
-            conn.close()
 
     def _load_skills_from_db(self) -> None:
         """Load all skills from the database into memory."""
-        conn = sqlite3.connect(self.db_path)
-        try:
-            cursor = conn.cursor()
-            cursor.execute("SELECT name, code, meta FROM skills")
-            rows = cursor.fetchall()
-            
-            for name, code, meta_json in rows:
-                try:
-                    meta_dict = json.loads(meta_json)
-                    meta = SkillMeta(**meta_dict)
+        skills = db.list_skills()
+        
+        for skill_meta in skills:
+            try:
+                # Get the code for this skill
+                _, code = db.get_skill(skill_meta.name)
+                if code:
                     # Register the skill from code (this will add it to in-memory registry)
-                    self.register_from_code(code, meta, persist=False)
-                    logger.info(f"Loaded skill from database: {name}")
-                except Exception as e:
-                    logger.error(f"Error loading skill {name}: {str(e)}")
-        except Exception as e:
-            logger.error(f"Error querying database: {str(e)}")
-        finally:
-            conn.close()
+                    self.register_from_code(code, skill_meta, persist=False)
+                    logger.info(f"Loaded skill from database: {skill_meta.name}")
+            except Exception as e:
+                logger.error(f"Error loading skill {skill_meta.name}: {str(e)}")
 
     def register(self, meta: SkillMeta, func: Callable[..., Any]) -> None:
         """Register a skill by name with its callable.
@@ -152,41 +119,13 @@ class SkillEngine:
             
             # Persist to database if requested
             if persist:
-                self._persist_skill_to_db(meta.name, code, meta)
+                db.save_skill(meta, code)
                 
             return
             
         except Exception as e:
             logger.error(f"Error registering skill from code: {str(e)}")
             raise SkillRegistrationError(f"Failed to register skill: {str(e)}") from e
-
-    def _persist_skill_to_db(self, name: str, code: str, meta: SkillMeta) -> None:
-        """Persist a skill to the SQLite database.
-        
-        Args:
-            name: Name of the skill
-            code: Python code string
-            meta: Skill metadata
-        """
-        conn = sqlite3.connect(self.db_path)
-        try:
-            cursor = conn.cursor()
-            # Convert meta to JSON for storage
-            meta_json = json.dumps(meta.dict())
-            
-            # Insert or replace the skill in the database
-            cursor.execute(
-                "INSERT OR REPLACE INTO skills (name, code, meta) VALUES (?, ?, ?)",
-                (name, code, meta_json)
-            )
-            conn.commit()
-            logger.info(f"Persisted skill to database: {name}")
-        except Exception as e:
-            logger.error(f"Error persisting skill to database: {str(e)}")
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
 
     def list_skills(self) -> list[SkillMeta]:
         return [meta for meta, _ in self._registry.values()]
@@ -196,7 +135,11 @@ class SkillEngine:
             raise SkillNotFound(name)
         meta, func = self._registry[name]
         try:
-            return func(**args)
+            # Run the function in a sandbox
+            return sandbox.run_skill_sandboxed(func, args)
+        except sandbox.SandboxError as exc:
+            # Wrap sandbox errors in SkillRuntimeError
+            raise SkillRuntimeError(f"Skill {name} failed in sandbox: {str(exc)}")
         except Exception as exc:  # pragma: no cover - runtime passthrough
             tb = traceback.format_exc()
             # Return a wrapped error to avoid leaking internal state in raw form
@@ -220,17 +163,8 @@ class SkillEngine:
             self._modules.pop(name)
         
         # Remove from database
-        conn = sqlite3.connect(self.db_path)
-        try:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM skills WHERE name = ?", (name,))
-            conn.commit()
-            logger.info(f"Unregistered skill: {name}")
-        except Exception as e:
-            logger.error(f"Error removing skill from database: {str(e)}")
-            conn.rollback()
-        finally:
-            conn.close()
+        db.delete_skill(name)
+        logger.info(f"Unregistered skill: {name}")
     
     def get_skill_code(self, name: str) -> str:
         """Get the source code for a registered skill.
@@ -244,19 +178,10 @@ class SkillEngine:
         Raises:
             SkillNotFound: If the skill is not registered
         """
-        conn = sqlite3.connect(self.db_path)
-        try:
-            cursor = conn.cursor()
-            cursor.execute("SELECT code FROM skills WHERE name = ?", (name,))
-            result = cursor.fetchone()
-            if not result:
-                raise SkillNotFound(name)
-            return result[0]
-        except sqlite3.Error as e:
-            logger.error(f"Database error retrieving skill code: {str(e)}")
-            raise
-        finally:
-            conn.close()
+        _, code = db.get_skill(name)
+        if not code:
+            raise SkillNotFound(name)
+        return code
 
 
 def create_default_engine() -> SkillEngine:
@@ -265,26 +190,24 @@ def create_default_engine() -> SkillEngine:
     The `echo` skill simply returns the payload back. This is useful for
     testing the MCP surface and the `/run` endpoint.
     
-    Uses a SQLite database in the current directory for persistence.
+    Uses a SQLite database for persistence.
     """
-    # Use a database in the current directory
-    db_path = os.path.join(os.getcwd(), "skills.db")
-    engine = SkillEngine(db_path=db_path)
+    # Make sure the database is initialized
+    db.init_db()
+    
+    # Create a new engine
+    engine = SkillEngine()
 
     # If echo skill isn't already in the database, register it
     try:
         engine.get_skill_code("echo")
     except SkillNotFound:
-        def echo(payload: Any = None) -> dict[str, Any]:
-            """Echo skill: returns the provided payload unchanged."""
-            return {"echo": payload}
-
-        meta = SkillMeta(name="echo", description="Return the input payload", inputs={"payload": "any"})
-        
         # Create the echo skill code
         echo_code = """def echo(payload: Any = None) -> dict[str, Any]:
     \"\"\"Echo skill: returns the provided payload unchanged.\"\"\"
     return {"echo": payload}"""
+        
+        meta = SkillMeta(name="echo", description="Return the input payload", inputs={"payload": "any"})
         
         # Register the echo skill with the code
         engine.register_from_code(echo_code, meta)
