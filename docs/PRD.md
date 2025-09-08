@@ -54,7 +54,7 @@ AutoLearn is implemented in **Python** with **OpenAI models** for reasoning and 
   - FastAPI server.  
   - MCP protocol endpoints (`/tools`, `/run`, updates).  
   - SkillEngine for NL → Python code generation, compilation, and registration.  
-  - Registry stored in memory with optional JSON persistence.  
+  - Registry stored in SQLite database for persistent storage between server restarts.  
 
 - **Frontend**  
   - React app with chat, code viewer, MCP viewer, and execution panel.  
@@ -93,7 +93,7 @@ AutoLearn is implemented in **Python** with **OpenAI models** for reasoning and 
 
 ## 7. Open Questions
 
-1. Should persistence be in-memory only, JSON files, or a lightweight database?  
+1. Should persistence be limited to SQLite, or should we support additional database options?  
 2. What level of sandboxing is required for safe code execution?  
 3. Should skills be Python-only or support multiple languages?  
 

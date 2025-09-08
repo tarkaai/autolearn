@@ -20,6 +20,7 @@ The project includes a **frontend demo app** where users can:
 - **Dynamic Skill Creation**: Natural language → Python code workflows.  
 - **Crystalized Memory**: Frequently used or complex reasoning preserved as code.  
 - **MCP Integration**: Skills instantly exposed to consuming agents.  
+- **Persistence**: SQLite database for storing skills between server restarts.
 - **Frontend Demo**: Chat, code viewer, MCP schema viewer, and execution panel.  
 
 ---
@@ -43,6 +44,7 @@ autolearn/
 │   └── openai_client.py # OpenAI integration
 ├── tests/            # Unit and integration tests
 ├── docs/             # Documentation (PRD, design notes)
+├── skills.db         # SQLite database for skill persistence
 └── README.md
 ```
 
@@ -170,6 +172,9 @@ OPENAI_MODEL=gpt-4.1-mini
 
 # Set logging level
 LOG_LEVEL=DEBUG
+
+# Customize database path (default is skills.db in project root)
+DB_PATH=/path/to/custom/skills.db
 ```
 
 The `server.py` script automatically loads variables from the `.env` file when starting the server.
@@ -183,6 +188,20 @@ Full details in `docs/PRD.md`.
 ## Security Considerations
 
 The current implementation executes generated code in the same process as the server. Future versions will add sandboxing for safer code execution.
+
+## Persistence
+
+AutoLearn uses SQLite for persistent storage of skills:
+
+- Skills are automatically saved to a database file (`skills.db` by default)
+- All registered skills are restored when the server restarts
+- Skills persist their metadata, source code, and other attributes
+- You can customize the database path using the `DB_PATH` environment variable
+
+This ensures that:
+1. Skills you create are not lost when the server restarts
+2. Your AI assistant can build on previously created skills
+3. You can back up or version control your skills database
 
 ---
 
