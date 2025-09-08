@@ -1,17 +1,16 @@
+# mypy: allow-untyped-defs
+from __future__ import annotations
+
 import ast
+from bisect import bisect_right
+from collections.abc import Iterable
+from collections.abc import Iterator
 import inspect
 import textwrap
 import tokenize
 import types
-import warnings
-from bisect import bisect_right
-from typing import Iterable
-from typing import Iterator
-from typing import List
-from typing import Optional
 from typing import overload
-from typing import Tuple
-from typing import Union
+import warnings
 
 
 class Source:
@@ -22,13 +21,17 @@ class Source:
 
     def __init__(self, obj: object = None) -> None:
         if not obj:
-            self.lines: List[str] = []
+            self.lines: list[str] = []
+            self.raw_lines: list[str] = []
         elif isinstance(obj, Source):
             self.lines = obj.lines
+            self.raw_lines = obj.raw_lines
         elif isinstance(obj, (tuple, list)):
             self.lines = deindent(x.rstrip("\n") for x in obj)
+            self.raw_lines = list(x.rstrip("\n") for x in obj)
         elif isinstance(obj, str):
             self.lines = deindent(obj.split("\n"))
+            self.raw_lines = obj.split("\n")
         else:
             try:
                 rawcode = getrawcode(obj)
@@ -36,6 +39,7 @@ class Source:
             except TypeError:
                 src = inspect.getsource(obj)  # type: ignore[arg-type]
             self.lines = deindent(src.split("\n"))
+            self.raw_lines = src.split("\n")
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Source):
@@ -46,14 +50,12 @@ class Source:
     __hash__ = None  # type: ignore
 
     @overload
-    def __getitem__(self, key: int) -> str:
-        ...
+    def __getitem__(self, key: int) -> str: ...
 
     @overload
-    def __getitem__(self, key: slice) -> "Source":
-        ...
+    def __getitem__(self, key: slice) -> Source: ...
 
-    def __getitem__(self, key: Union[int, slice]) -> Union[str, "Source"]:
+    def __getitem__(self, key: int | slice) -> str | Source:
         if isinstance(key, int):
             return self.lines[key]
         else:
@@ -61,6 +63,7 @@ class Source:
                 raise IndexError("cannot slice a Source with a step")
             newsource = Source()
             newsource.lines = self.lines[key.start : key.stop]
+            newsource.raw_lines = self.raw_lines[key.start : key.stop]
             return newsource
 
     def __iter__(self) -> Iterator[str]:
@@ -69,7 +72,7 @@ class Source:
     def __len__(self) -> int:
         return len(self.lines)
 
-    def strip(self) -> "Source":
+    def strip(self) -> Source:
         """Return new Source object with trailing and leading blank lines removed."""
         start, end = 0, len(self)
         while start < end and not self.lines[start].strip():
@@ -77,23 +80,25 @@ class Source:
         while end > start and not self.lines[end - 1].strip():
             end -= 1
         source = Source()
+        source.raw_lines = self.raw_lines
         source.lines[:] = self.lines[start:end]
         return source
 
-    def indent(self, indent: str = " " * 4) -> "Source":
+    def indent(self, indent: str = " " * 4) -> Source:
         """Return a copy of the source object with all lines indented by the
         given indent-string."""
         newsource = Source()
+        newsource.raw_lines = self.raw_lines
         newsource.lines = [(indent + line) for line in self.lines]
         return newsource
 
-    def getstatement(self, lineno: int) -> "Source":
+    def getstatement(self, lineno: int) -> Source:
         """Return Source statement which contains the given linenumber
         (counted from 0)."""
         start, end = self.getstatementrange(lineno)
         return self[start:end]
 
-    def getstatementrange(self, lineno: int) -> Tuple[int, int]:
+    def getstatementrange(self, lineno: int) -> tuple[int, int]:
         """Return (start, end) tuple which spans the minimal statement region
         which containing the given lineno."""
         if not (0 <= lineno < len(self)):
@@ -101,10 +106,11 @@ class Source:
         ast, start, end = getstatementrange_ast(lineno, self)
         return start, end
 
-    def deindent(self) -> "Source":
+    def deindent(self) -> Source:
         """Return a new Source object deindented."""
         newsource = Source()
         newsource.lines[:] = deindent(self.lines)
+        newsource.raw_lines = self.raw_lines
         return newsource
 
     def __str__(self) -> str:
@@ -116,13 +122,14 @@ class Source:
 #
 
 
-def findsource(obj) -> Tuple[Optional[Source], int]:
+def findsource(obj) -> tuple[Source | None, int]:
     try:
         sourcelines, lineno = inspect.findsource(obj)
     except Exception:
         return None, -1
     source = Source()
     source.lines = [line.rstrip() for line in sourcelines]
+    source.raw_lines = sourcelines
     return source, lineno
 
 
@@ -139,24 +146,23 @@ def getrawcode(obj: object, trycall: bool = True) -> types.CodeType:
     raise TypeError(f"could not get code object for {obj!r}")
 
 
-def deindent(lines: Iterable[str]) -> List[str]:
+def deindent(lines: Iterable[str]) -> list[str]:
     return textwrap.dedent("\n".join(lines)).splitlines()
 
 
-def get_statement_startend2(lineno: int, node: ast.AST) -> Tuple[int, Optional[int]]:
+def get_statement_startend2(lineno: int, node: ast.AST) -> tuple[int, int | None]:
     # Flatten all statements and except handlers into one lineno-list.
     # AST's line numbers start indexing at 1.
-    values: List[int] = []
+    values: list[int] = []
     for x in ast.walk(node):
         if isinstance(x, (ast.stmt, ast.ExceptHandler)):
-            # Before Python 3.8, the lineno of a decorated class or function pointed at the decorator.
-            # Since Python 3.8, the lineno points to the class/def, so need to include the decorators.
+            # The lineno points to the class/def, so need to include the decorators.
             if isinstance(x, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
                 for d in x.decorator_list:
                     values.append(d.lineno - 1)
             values.append(x.lineno - 1)
             for name in ("finalbody", "orelse"):
-                val: Optional[List[ast.stmt]] = getattr(x, name, None)
+                val: list[ast.stmt] | None = getattr(x, name, None)
                 if val:
                     # Treat the finally/orelse part as its own statement.
                     values.append(val[0].lineno - 1 - 1)
@@ -174,8 +180,8 @@ def getstatementrange_ast(
     lineno: int,
     source: Source,
     assertion: bool = False,
-    astnode: Optional[ast.AST] = None,
-) -> Tuple[ast.AST, int, int]:
+    astnode: ast.AST | None = None,
+) -> tuple[ast.AST, int, int]:
     if astnode is None:
         content = str(source)
         # See #4260:
@@ -197,7 +203,9 @@ def getstatementrange_ast(
         # by using the BlockFinder helper used which inspect.getsource() uses itself.
         block_finder = inspect.BlockFinder()
         # If we start with an indented line, put blockfinder to "started" mode.
-        block_finder.started = source.lines[start][0].isspace()
+        block_finder.started = (
+            bool(source.lines[start]) and source.lines[start][0].isspace()
+        )
         it = ((x + "\n") for x in source.lines[start:end])
         try:
             for tok in tokenize.generate_tokens(lambda: next(it)):

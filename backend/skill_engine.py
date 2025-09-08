@@ -213,3 +213,55 @@ def create_default_engine() -> SkillEngine:
         engine.register_from_code(echo_code, meta)
     
     return engine
+
+
+# Global engine instance for dependency injection
+_engine_instance: Optional[SkillEngine] = None
+
+def get_engine() -> SkillEngine:
+    """Get the global SkillEngine instance.
+    
+    Returns:
+        The global SkillEngine instance
+    """
+    global _engine_instance
+    if _engine_instance is None:
+        _engine_instance = create_default_engine()
+    return _engine_instance
+
+
+def get_mcp_spec(engine: SkillEngine) -> dict:
+    """Generate the MCP specification from registered skills.
+    
+    Args:
+        engine: SkillEngine instance
+        
+    Returns:
+        MCP specification as a dictionary
+    """
+    tools = []
+    for meta in engine.list_skills():
+        tools.append({
+            "type": "function",
+            "function": {
+                "name": meta.name,
+                "description": meta.description,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        k: {"type": v} for k, v in meta.inputs.items()
+                    },
+                    "required": list(meta.inputs.keys())
+                }
+            }
+        })
+    
+    return {
+        "schema_version": "1.0",
+        "server_info": {
+            "name": "AutoLearn",
+            "version": "0.1.0",
+            "description": "Dynamic skill creation for AI agents"
+        },
+        "tools": tools
+    }

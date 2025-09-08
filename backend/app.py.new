@@ -1,0 +1,375 @@
+"""FastAPI app for AutoLearn Milestone 3."""
+
+from __future__ import annotations
+
+import os
+import logging
+from typing import Optional, Any, List
+from datetime import datetime
+
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+
+from .schemas import (
+    GenerateSkillRequest, 
+    GenerateSkillResponse, 
+    RegisterSkillRequest, 
+    RegisterSkillResponse,
+    GetSkillCodeResponse,
+    RunRequest, 
+    RunResponse, 
+    SkillMeta,
+    ChatSession,
+    ChatMessage,
+    CreateSessionRequest,
+    CreateSessionResponse,
+    AddMessageRequest,
+    AddMessageResponse
+)
+from .skill_engine import (
+    SkillEngine, 
+    SkillNotFound, 
+    SkillRuntimeError, 
+    SkillRegistrationError,
+    create_default_engine
+)
+from .openai_client import OpenAIClient, SkillGenerationRequest, create_default_client
+from . import websocket
+from . import sessions
+
+logger = logging.getLogger("autolearn")
+
+# Create the FastAPI app
+app = FastAPI(title="AutoLearn Milestone 3")
+
+# Add CORS middleware to allow cross-origin requests from the frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, this should be restricted to the frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+def get_engine() -> SkillEngine:
+    """Dependency for getting the SkillEngine instance.
+    
+    In Milestone 1, this created a new engine each time. For Milestone 2,
+    we'll store a shared instance in app.state for persistence across requests.
+    """
+    return app.state.engine
+
+
+def get_openai_client() -> OpenAIClient:
+    """Dependency for getting the OpenAI client instance."""
+    if not hasattr(app.state, "openai_client"):
+        app.state.openai_client = create_default_client()
+    return app.state.openai_client
+
+
+@app.on_event("startup")
+async def _on_startup() -> None:
+    """Initialize the app with a shared SkillEngine instance and WebSocket."""
+    logger.info("Starting AutoLearn Milestone 3 app")
+    
+    # Create and store a single SkillEngine instance for the app
+    app.state.engine = create_default_engine()
+    
+    # Set up WebSocket
+    await websocket.setup_socketio(app)
+    
+    # Check if OpenAI API key is set
+    if not os.environ.get("OPENAI_API_KEY"):
+        logger.warning(
+            "OPENAI_API_KEY environment variable not set. "
+            "OpenAI integration will not work until this is configured."
+        )
+
+
+@app.on_event("shutdown")
+def _on_shutdown() -> None:
+    logger.info("Shutting down AutoLearn Milestone 3 app")
+
+
+@app.get("/health")
+def health() -> JSONResponse:
+    return JSONResponse({"status": "ok"})
+
+
+@app.get("/tools")
+def tools(engine: SkillEngine = Depends(get_engine)) -> list[SkillMeta]:
+    """Return a list of all registered skills."""
+    return engine.list_skills()
+
+
+# Session management endpoints
+
+@app.post("/sessions")
+async def create_session(
+    request: CreateSessionRequest
+) -> CreateSessionResponse:
+    """Create a new chat session."""
+    session = sessions.create_session(request)
+    return CreateSessionResponse(session=session)
+
+
+@app.get("/sessions")
+async def list_sessions() -> List[ChatSession]:
+    """List all chat sessions."""
+    return sessions.list_sessions()
+
+
+@app.get("/sessions/{session_id}")
+async def get_session(session_id: str) -> ChatSession:
+    """Get a chat session by ID."""
+    session = sessions.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
+    return session
+
+
+@app.post("/sessions/{session_id}/messages")
+async def add_message(
+    session_id: str,
+    request: AddMessageRequest,
+    openai_client: OpenAIClient = Depends(get_openai_client),
+    engine: SkillEngine = Depends(get_engine)
+) -> AddMessageResponse:
+    """Add a message to a chat session."""
+    message = sessions.add_message(session_id, request)
+    if not message:
+        raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
+    
+    # If this is a user message, generate an assistant response
+    generated_skill = None
+    if request.role == "user":
+        # For now, we'll just echo the message as the assistant
+        # In a real implementation, this would call OpenAI and potentially generate skills
+        assistant_req = AddMessageRequest(
+            role="assistant",
+            content=f"I received your message: {request.content}"
+        )
+        assistant_msg = sessions.add_message(session_id, assistant_req)
+        
+        # For demonstration purposes, check if the message contains "create a skill"
+        if "create a skill" in request.content.lower():
+            # Extract a skill description
+            description = request.content.lower().split("create a skill", 1)[1].strip()
+            if description:
+                try:
+                    # Generate a skill
+                    generation_req = SkillGenerationRequest(
+                        description=description,
+                        name=None
+                    )
+                    result = openai_client.generate_skill_code(generation_req)
+                    
+                    # Register the skill
+                    meta = SkillMeta(**result.meta)
+                    engine.register_from_code(result.code, meta)
+                    
+                    # Update the assistant message to mention the skill
+                    assistant_req = AddMessageRequest(
+                        role="assistant",
+                        content=f"I've created a new skill called '{meta.name}' based on your request. You can now use it!"
+                    )
+                    assistant_msg = sessions.add_message(session_id, assistant_req)
+                    
+                    # Save the skill name in the message
+                    message.skill_generated = meta.name
+                    
+                    # Include the skill metadata in the response
+                    generated_skill = meta
+                    
+                    # Emit WebSocket events
+                    await websocket.emit_skill_added(meta.dict())
+                    mcp_spec = get_mcp_spec(engine)
+                    await websocket.emit_mcp_updated(mcp_spec)
+                    
+                except Exception as e:
+                    logger.exception("Error generating skill from chat")
+                    assistant_req = AddMessageRequest(
+                        role="assistant",
+                        content=f"I tried to create a skill but encountered an error: {str(e)}"
+                    )
+                    assistant_msg = sessions.add_message(session_id, assistant_req)
+    
+    return AddMessageResponse(message=message, skill_generated=generated_skill)
+
+
+@app.post("/run")
+async def run(req: RunRequest, engine: SkillEngine = Depends(get_engine)) -> RunResponse:
+    try:
+        result = engine.run(req.name, req.args)
+        response = RunResponse(success=True, result=result)
+        
+        # Emit WebSocket event for skill execution
+        execution_result = {
+            "skill": req.name,
+            "args": req.args,
+            "result": result,
+            "timestamp": datetime.now().isoformat()
+        }
+        await websocket.emit_skill_executed(execution_result)
+        
+        return response
+    except SkillNotFound:
+        raise HTTPException(status_code=404, detail=f"Skill not found: {req.name}")
+    except SkillRuntimeError as e:
+        # Avoid leaking full traceback to clients; include a short message
+        logger.exception("Skill runtime error")
+        return RunResponse(success=False, error=str(e))
+
+
+def get_mcp_spec(engine: SkillEngine) -> dict:
+    """Generate the MCP specification from registered skills.
+    
+    Args:
+        engine: SkillEngine instance
+        
+    Returns:
+        MCP specification as a dictionary
+    """
+    tools = []
+    for meta in engine.list_skills():
+        tools.append({
+            "type": "function",
+            "function": {
+                "name": meta.name,
+                "description": meta.description,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        k: {"type": v} for k, v in meta.inputs.items()
+                    },
+                    "required": list(meta.inputs.keys())
+                }
+            }
+        })
+    
+    return {
+        "schema_version": "1.0",
+        "server_info": {
+            "name": "AutoLearn",
+            "version": "0.1.0",
+            "description": "Dynamic skill creation for AI agents"
+        },
+        "tools": tools
+    }
+
+
+@app.get("/mcp")
+async def mcp(engine: SkillEngine = Depends(get_engine)) -> dict:
+    """Return a full MCP-style spec generated from registered skills."""
+    return get_mcp_spec(engine)
+
+
+@app.post("/skills/generate")
+async def generate_skill(
+    req: GenerateSkillRequest,
+    openai_client: OpenAIClient = Depends(get_openai_client)
+) -> GenerateSkillResponse:
+    """Generate Python code for a new skill based on natural language description."""
+    try:
+        # Convert our API schema to OpenAI client schema
+        generation_req = SkillGenerationRequest(
+            description=req.description,
+            name=req.name,
+            inputs=req.inputs
+        )
+        
+        # Call OpenAI to generate the code
+        result = openai_client.generate_skill_code(generation_req)
+        
+        # Convert the result to our API schema
+        meta_dict = result.meta
+        if not isinstance(meta_dict, dict):
+            raise ValueError("Generated metadata is not a dictionary")
+            
+        # Create a proper SkillMeta object from the dict
+        meta = SkillMeta(
+            name=meta_dict.get("name", req.name or "unnamed_skill"),
+            description=meta_dict.get("description", req.description),
+            version=meta_dict.get("version", "0.1.0"),
+            inputs=meta_dict.get("inputs", {})
+        )
+        
+        return GenerateSkillResponse(
+            success=True,
+            code=result.code,
+            meta=meta
+        )
+    
+    except Exception as e:
+        logger.exception("Error generating skill")
+        return GenerateSkillResponse(
+            success=False,
+            error=f"Failed to generate skill: {str(e)}"
+        )
+
+
+@app.post("/skills/register")
+async def register_skill(
+    req: RegisterSkillRequest,
+    engine: SkillEngine = Depends(get_engine)
+) -> RegisterSkillResponse:
+    """Register a new skill from generated code."""
+    try:
+        # Register the skill from code
+        engine.register_from_code(req.code, req.meta)
+        
+        # Emit WebSocket events for skill registration
+        await websocket.emit_skill_added(req.meta.dict())
+        
+        # Update MCP spec and emit event
+        mcp_spec = get_mcp_spec(engine)
+        await websocket.emit_mcp_updated(mcp_spec)
+        
+        return RegisterSkillResponse(
+            success=True,
+            name=req.meta.name
+        )
+    
+    except SkillRegistrationError as e:
+        logger.exception("Error registering skill")
+        return RegisterSkillResponse(
+            success=False,
+            error=f"Failed to register skill: {str(e)}"
+        )
+
+
+@app.get("/skills/{name}/code")
+async def get_skill_code(
+    name: str,
+    engine: SkillEngine = Depends(get_engine)
+) -> GetSkillCodeResponse:
+    """Get the source code for a registered skill."""
+    try:
+        code = engine.get_skill_code(name)
+        return GetSkillCodeResponse(
+            name=name,
+            code=code
+        )
+    except SkillNotFound:
+        raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
+    except Exception as e:
+        logger.exception(f"Error retrieving skill code for {name}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving skill code: {str(e)}")
+
+
+@app.delete("/skills/{name}")
+async def delete_skill(
+    name: str,
+    engine: SkillEngine = Depends(get_engine)
+) -> dict:
+    """Delete a registered skill."""
+    try:
+        engine.unregister(name)
+        return {"success": True, "message": f"Skill '{name}' unregistered successfully"}
+    except SkillNotFound:
+        raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
+    except Exception as e:
+        logger.exception(f"Error unregistering skill: {name}")
+        raise HTTPException(status_code=500, detail=f"Error unregistering skill: {str(e)}")

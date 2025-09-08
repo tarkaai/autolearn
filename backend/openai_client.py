@@ -23,7 +23,7 @@ class OpenAIConfig(BaseModel):
     """Configuration for OpenAI API client."""
 
     api_key: str = Field(..., description="OpenAI API key")
-    model_name: str = Field("gpt-4.1", description="OpenAI model name")
+    model_name: str = Field("gpt-4o", description="OpenAI model name")
     temperature: float = Field(0.1, description="Temperature for generation (0.0-1.0)")
     max_tokens: int = Field(4000, description="Maximum tokens in response")
 
@@ -154,3 +154,9 @@ The metadata should include:
 def create_default_client() -> OpenAIClient:
     """Create an OpenAI client with default configuration from environment."""
     return OpenAIClient()
+
+
+# Dependency for FastAPI
+def get_openai_client() -> OpenAIClient:
+    """Get the OpenAI client for dependency injection."""
+    return create_default_client()

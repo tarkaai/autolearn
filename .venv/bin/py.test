@@ -1,4 +1,4 @@
-#!/Users/dan/Projects/autolearn/.venv/bin/python3
+#!/Users/dan/Projects/autolearn/.venv/bin/python
 import sys
 from pytest import console_main
 if __name__ == '__main__':

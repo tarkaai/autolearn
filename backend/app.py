@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import os
+import json
 import logging
 from typing import Optional, Any, List
 from datetime import datetime
+
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -32,12 +37,15 @@ from .skill_engine import (
     SkillNotFound, 
     SkillRuntimeError, 
     SkillRegistrationError,
-    create_default_engine
+    create_default_engine,
+    get_mcp_spec,
+    get_engine
 )
-from .openai_client import OpenAIClient, SkillGenerationRequest, create_default_client
+from .openai_client import OpenAIClient, SkillGenerationRequest, create_default_client, get_openai_client
 from . import websocket
 from . import sessions
 from . import db
+from .mcp_protocol import MCPProtocolHandler
 
 logger = logging.getLogger("autolearn")
 
@@ -54,20 +62,7 @@ app.add_middleware(
 )
 
 
-def get_engine() -> SkillEngine:
-    """Dependency for getting the SkillEngine instance.
-    
-    In Milestone 1, this created a new engine each time. For Milestone 2,
-    we'll store a shared instance in app.state for persistence across requests.
-    """
-    return app.state.engine
 
-
-def get_openai_client() -> OpenAIClient:
-    """Dependency for getting the OpenAI client instance."""
-    if not hasattr(app.state, "openai_client"):
-        app.state.openai_client = create_default_client()
-    return app.state.openai_client
 
 
 @app.on_event("startup")
@@ -75,13 +70,17 @@ async def _on_startup() -> None:
     """Initialize the app with a shared SkillEngine instance and WebSocket."""
     logger.info("Starting AutoLearn Milestone 3 app")
     
-    # Initialize the database
+    # Initialize database
     db.init_db()
     
-    # Create and store a single SkillEngine instance for the app
-    app.state.engine = create_default_engine()
+    # Initialize the global SkillEngine instance
+    engine = get_engine()
     
-    # Set up WebSocket
+    # Initialize MCP protocol handler
+    app.state.mcp_handler = MCPProtocolHandler(engine)
+    logger.info("MCP protocol handler initialized")
+    
+    # Set up WebSocket (keep for demo frontend)
     await websocket.setup_socketio(app)
     
     # Check if OpenAI API key is set
@@ -147,13 +146,66 @@ async def add_message(
         raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
     
     # If this is a user message, generate an assistant response
+    # This is a DEMO of how an MCP client might interact with our server
     generated_skill = None
     if request.role == "user":
-        # For now, we'll just echo the message as the assistant
-        # In a real implementation, this would call OpenAI and potentially generate skills
+        # Simple demo responses showing MCP server capabilities
+        user_content = request.content.lower()
+        
+        if "hello" in user_content or "hi " in user_content:
+            assistant_content = "Hello! I'm AutoLearn, an MCP server. I can help you create and execute skills. Try asking me to 'list skills' or 'create a skill that adds numbers'."
+        elif "list skills" in user_content or "what skills" in user_content:
+            skills = engine.list_skills()
+            if skills:
+                skill_list = "\n".join([f"- {skill.name}: {skill.description}" for skill in skills])
+                assistant_content = f"Available skills:\n{skill_list}\n\nYou can execute these via the MCP /run endpoint or ask me to create new ones."
+            else:
+                assistant_content = "No skills available yet. Try asking me to create one!"
+        elif "create a skill" in user_content:
+            try:
+                # Extract skill description
+                description = user_content.split("create a skill", 1)[1].strip()
+                if description.startswith("that "):
+                    description = description[5:]
+                
+                if description:
+                    # Generate a skill using OpenAI
+                    generation_req = SkillGenerationRequest(
+                        description=description,
+                        name=None
+                    )
+                    result = openai_client.generate_skill_code(generation_req)
+                    
+                    # Register the skill
+                    engine.register_from_code(result.code, result.meta)
+                    generated_skill = result.meta.name
+                    
+                    # Emit WebSocket events
+                    await websocket.emit_skill_added(result.meta.dict())
+                    mcp_spec = get_mcp_spec(engine)
+                    await websocket.emit_mcp_updated(mcp_spec)
+                    
+                    assistant_content = f"✅ Created skill '{result.meta.name}'! This skill can now be called via MCP. Description: {result.meta.description}"
+                else:
+                    assistant_content = "Please provide a description of what skill you'd like me to create."
+            except Exception as e:
+                logger.exception(f"Error generating skill: {e}")
+                assistant_content = f"Sorry, I couldn't create that skill. Error: {str(e)}"
+        elif any(skill.name in user_content for skill in engine.list_skills()):
+            # User mentioned a skill name - suggest how to use it
+            mentioned_skills = [skill.name for skill in engine.list_skills() if skill.name in user_content]
+            if mentioned_skills:
+                skill_name = mentioned_skills[0]
+                assistant_content = f"I see you mentioned '{skill_name}'. You can execute this skill via the MCP server using the /run endpoint, or through the Execute panel in the frontend."
+            else:
+                assistant_content = "I understand you want to use a skill, but I'm not sure which one. Type 'list skills' to see available skills."
+        else:
+            assistant_content = "I'm AutoLearn, an MCP server for dynamic skill creation. I can:\n• List available skills\n• Create new skills from descriptions\n• Execute skills via MCP protocol\n\nTry: 'list skills' or 'create a skill that multiplies numbers'"
+        
+        # Add assistant response to session
         assistant_req = AddMessageRequest(
-            role="assistant",
-            content=f"I received your message: {request.content}"
+            role="assistant", 
+            content=assistant_content
         )
         assistant_msg = sessions.add_message(session_id, assistant_req)
         
@@ -227,47 +279,58 @@ async def run(req: RunRequest, engine: SkillEngine = Depends(get_engine)) -> Run
         return RunResponse(success=False, error=str(e))
 
 
-def get_mcp_spec(engine: SkillEngine) -> dict:
-    """Generate the MCP specification from registered skills.
-    
-    Args:
-        engine: SkillEngine instance
-        
-    Returns:
-        MCP specification as a dictionary
-    """
-    tools = []
-    for meta in engine.list_skills():
-        tools.append({
-            "type": "function",
-            "function": {
-                "name": meta.name,
-                "description": meta.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        k: {"type": v} for k, v in meta.inputs.items()
-                    },
-                    "required": list(meta.inputs.keys())
-                }
-            }
-        })
-    
-    return {
-        "schema_version": "1.0",
-        "server_info": {
-            "name": "AutoLearn",
-            "version": "0.1.0",
-            "description": "Dynamic skill creation for AI agents"
-        },
-        "tools": tools
-    }
-
 
 @app.get("/mcp")
 async def mcp(engine: SkillEngine = Depends(get_engine)) -> dict:
     """Return a full MCP-style spec generated from registered skills."""
     return get_mcp_spec(engine)
+
+
+@app.post("/mcp")
+async def mcp_jsonrpc(request: Request) -> JSONResponse:
+    """
+    MCP JSON-RPC over HTTP endpoint.
+    
+    This endpoint handles MCP protocol messages over HTTP transport.
+    MCP clients can connect to this endpoint to use AutoLearn skills.
+    """
+    try:
+        # Ensure MCP handler is initialized (fallback for tests)
+        if not hasattr(request.app.state, 'mcp_handler'):
+            engine = get_engine()
+            request.app.state.mcp_handler = MCPProtocolHandler(engine)
+            logger.info("MCP protocol handler initialized (fallback)")
+        
+        # Get the JSON-RPC message from request body
+        message = await request.body()
+        message_str = message.decode('utf-8')
+        
+        # Handle the message through MCP protocol handler
+        response = await request.app.state.mcp_handler.handle_message(message_str)
+        
+        # Return the response
+        if response:
+            # Parse the JSON string back to dict for JSONResponse
+            import json
+            response_dict = json.loads(response)
+            return JSONResponse(content=response_dict)
+        else:
+            # No response for notifications
+            return JSONResponse(content={}, status_code=204)
+            
+    except Exception as e:
+        logger.error(f"MCP endpoint error: {str(e)}")
+        return JSONResponse(
+            content={
+                "jsonrpc": "2.0", 
+                "error": {
+                    "code": -32603,
+                    "message": f"Internal error: {str(e)}"
+                },
+                "id": None
+            },
+            status_code=500
+        )
 
 
 @app.post("/skills/generate")

@@ -136,7 +136,7 @@ def test_register_skill(client):
     mcp_response = client.get("/mcp")
     assert mcp_response.status_code == 200
     mcp = mcp_response.json()
-    assert any(tool["name"] == "calculator" for tool in mcp["tools"])
+    assert any(tool["function"]["name"] == "calculator" for tool in mcp["tools"])
 
 
 def test_run_registered_skill(client):
