@@ -1,0 +1,40 @@
+# .instructions
+
+## GitHub Copilot Project Rules for AutoLearn
+
+1. **Language & Frameworks**
+   - Backend must use Python 3.11+ and FastAPI.
+   - Frontend must use React and Tailwind CSS.
+
+2. **Skill Generation**
+   - Skills are defined as Python functions generated from natural language requests.
+   - Use OpenAI models (`gpt-4.1`, `gpt-4.1-mini`) for reasoning and code scaffolding.
+   - Skills should be registered and callable via MCP protocol endpoints.
+
+3. **MCP Protocol**
+   - Implement endpoints for `/tools`, `/run`, and dynamic updates.
+   - MCP spec must update in real time as new skills are created.
+
+4. **Frontend Features**
+   - Provide a chat interface for agent interaction.
+   - Include panels for skill code viewing, MCP spec display, and skill execution.
+
+5. **Persistence**
+   - Store skill registry in memory, with optional JSON file persistence.
+
+6. **Testing**
+   - Ensure unit and integration tests cover skill generation, MCP updates, and frontend functionality.
+
+7. **Security**
+   - Consider sandboxing for safe code execution.
+
+8. **Boilerplate**
+   - Minimize boilerplate; scaffold code where possible.
+
+9. **Documentation**
+   - Keep code and features consistent with PRD.md requirements.
+
+10. **Success Criteria**
+    - Agents can dynamically create and use skills.
+    - MCP spec reflects new skills instantly.
+    - Demo app clearly shows AutoLearn’s capabilities.
