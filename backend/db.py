@@ -189,6 +189,22 @@ def delete_skill(name: str) -> bool:
         logger.exception(f"Error deleting skill {name}: {e}")
         return False
 
+def clear_all_skills() -> bool:
+    """Clear all skills from the database.
+    
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        with get_db_connection() as conn:
+            conn.execute("DELETE FROM skills")
+            conn.commit()
+        logger.info("All skills cleared from database")
+        return True
+    except Exception as e:
+        logger.exception(f"Error clearing all skills: {e}")
+        return False
+
 def list_skills() -> List[SkillMeta]:
     """List all skills in the database.
     

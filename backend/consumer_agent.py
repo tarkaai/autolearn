@@ -280,8 +280,21 @@ Respond in a natural, conversational way while being clear about what actions yo
             
             actions = []
             
-            # If skill generation is needed, attempt to generate it automatically
-            if needs_skill_generation:
+            # First, try to execute existing tools that can handle the request
+            executed_tools = await self._try_execute_relevant_tools(
+                user_message, agent_response, available_tools, context
+            )
+            
+            if executed_tools:
+                # Add tool execution actions
+                actions.extend(executed_tools)
+                # Update the response to include results
+                for tool_result in executed_tools:
+                    if tool_result.get("result"):
+                        agent_response += f"\n\nUsing the {tool_result['skill_name']} skill, the result is: {tool_result['result']}"
+            
+            # If no tools were executed and skill generation is needed, attempt to generate it automatically
+            elif needs_skill_generation:
                 logger.info(f"Skill generation needed for message: {user_message}")
                 try:
                     # Extract skill description from user message and agent response
@@ -338,6 +351,129 @@ Respond in a natural, conversational way while being clear about what actions yo
                 "needs_skill_generation": False
             }
             
+    async def _try_execute_relevant_tools(
+        self, 
+        user_message: str, 
+        agent_response: str, 
+        available_tools: List[Dict[str, Any]], 
+        context: ConversationContext
+    ) -> List[Dict[str, Any]]:
+        """Try to execute relevant existing tools based on user message and agent response."""
+        
+        executed_actions = []
+        user_lower = user_message.lower()
+        response_lower = agent_response.lower()
+        
+        # Check for mathematical operations that existing tools can handle
+        async with MCPClient(self.mcp_server_url) as mcp:
+            try:
+                # Addition patterns
+                if any(keyword in user_lower for keyword in ["add", "plus", "+", "sum"]):
+                    # Try to extract two numbers for addition
+                    import re
+                    numbers = re.findall(r'\b\d+(?:\.\d+)?\b', user_message)
+                    if len(numbers) >= 2:
+                        a, b = float(numbers[0]), float(numbers[1])
+                        
+                        # Check if add_two_numbers tool is available
+                        if any(tool["name"] == "add_two_numbers" for tool in available_tools):
+                            result = await mcp.call_tool("add_two_numbers", {"a": a, "b": b})
+                            executed_actions.append({
+                                "type": "skill_used",
+                                "skill_name": "add_two_numbers", 
+                                "result": result,
+                                "inputs": {"a": a, "b": b}
+                            })
+                            context.skills_used.append("add_two_numbers")
+                
+                # Multiplication patterns  
+                elif any(keyword in user_lower for keyword in ["multiply", "times", "*", "product"]):
+                    import re
+                    numbers = re.findall(r'\b\d+(?:\.\d+)?\b', user_message)
+                    if len(numbers) >= 2:
+                        a, b = float(numbers[0]), float(numbers[1])
+                        
+                        if any(tool["name"] == "multiply_numbers" for tool in available_tools):
+                            result = await mcp.call_tool("multiply_numbers", {"a": a, "b": b})
+                            executed_actions.append({
+                                "type": "skill_used",
+                                "skill_name": "multiply_numbers",
+                                "result": result,
+                                "inputs": {"a": a, "b": b}
+                            })
+                            context.skills_used.append("multiply_numbers")
+                
+                # Calculator patterns (for general arithmetic)
+                elif any(keyword in user_lower for keyword in ["calculate", "compute"]) and not executed_actions:
+                    import re
+                    numbers = re.findall(r'\b\d+(?:\.\d+)?\b', user_message)
+                    if len(numbers) >= 2:
+                        a, b = float(numbers[0]), float(numbers[1])
+                        
+                        # Determine operation
+                        operation = None
+                        if any(op in user_lower for op in ["add", "plus", "+"]):
+                            operation = "add"
+                        elif any(op in user_lower for op in ["subtract", "minus", "-"]):
+                            operation = "subtract" 
+                        elif any(op in user_lower for op in ["multiply", "times", "*"]):
+                            operation = "multiply"
+                        elif any(op in user_lower for op in ["divide", "/"]):
+                            operation = "divide"
+                        
+                        if operation and any(tool["name"] == "calculator" for tool in available_tools):
+                            result = await mcp.call_tool("calculator", {
+                                "operation": operation, 
+                                "a": a, 
+                                "b": b
+                            })
+                            executed_actions.append({
+                                "type": "skill_used",
+                                "skill_name": "calculator",
+                                "result": result,
+                                "inputs": {"operation": operation, "a": a, "b": b}
+                            })
+                            context.skills_used.append("calculator")
+                
+                # Circle area patterns
+                elif any(keyword in user_lower for keyword in ["circle", "area"]) and "radius" in user_lower:
+                    import re
+                    numbers = re.findall(r'\b\d+(?:\.\d+)?\b', user_message)
+                    if numbers:
+                        radius = float(numbers[0])
+                        
+                        if any(tool["name"] == "calculate_circle_area" for tool in available_tools):
+                            result = await mcp.call_tool("calculate_circle_area", {"radius": radius})
+                            executed_actions.append({
+                                "type": "skill_used",
+                                "skill_name": "calculate_circle_area",
+                                "result": result,
+                                "inputs": {"radius": radius}
+                            })
+                            context.skills_used.append("calculate_circle_area")
+                
+                # Square root patterns
+                elif any(keyword in user_lower for keyword in ["square root", "sqrt"]):
+                    import re
+                    numbers = re.findall(r'\b\d+(?:\.\d+)?\b', user_message)
+                    if numbers:
+                        number = float(numbers[0])
+                        
+                        if any(tool["name"] == "calculate_square_root" for tool in available_tools):
+                            result = await mcp.call_tool("calculate_square_root", {"number": number})
+                            executed_actions.append({
+                                "type": "skill_used",
+                                "skill_name": "calculate_square_root",
+                                "result": result,
+                                "inputs": {"number": number}
+                            })
+                            context.skills_used.append("calculate_square_root")
+                
+            except Exception as e:
+                logger.error(f"Error executing tools: {e}")
+        
+        return executed_actions
+    
     def _extract_skill_description(self, user_message: str, agent_response: str) -> str:
         """Extract a skill description from user message and agent response."""
         # Simple extraction - look for common patterns
