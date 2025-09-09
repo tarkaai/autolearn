@@ -322,7 +322,7 @@ class TestMilestone3Chat:
 
 def test_integration_scenario():
     """Test a complete integration scenario."""
-    with TestClient(app) as test_client:
+    with TestClient(app=app) as test_client:
         # 1. Check MCP spec
         mcp_response = test_client.get("/mcp")
         assert mcp_response.status_code == 200

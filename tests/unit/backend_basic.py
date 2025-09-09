@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from backend.app import app
 
 
-client = TestClient(app=app)
+client = TestClient(app)
 
 
 def test_health():

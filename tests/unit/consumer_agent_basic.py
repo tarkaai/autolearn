@@ -28,7 +28,7 @@ from backend.app import app
 from backend import db
 from backend.consumer_agent import ConsumerAgent, MCPClient
 
-client = TestClient(app=app)
+client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)

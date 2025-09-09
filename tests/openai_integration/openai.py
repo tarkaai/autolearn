@@ -3,6 +3,7 @@
 
 import os
 import sys
+import pytest
 from dotenv import load_dotenv
 
 # Add project root to path
@@ -22,7 +23,7 @@ def test_openai_integration():
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         print("❌ OPENAI_API_KEY not found in environment")
-        return False
+        pytest.skip("OPENAI_API_KEY not found in environment")
     
     print(f"✅ OPENAI_API_KEY found: {api_key[:10]}...")
     
@@ -33,7 +34,7 @@ def test_openai_integration():
         print(f"   Model: {client.config.model_name}")
     except Exception as e:
         print(f"❌ Failed to create OpenAI client: {e}")
-        return False
+        pytest.fail(f"Failed to create OpenAI client: {e}")
     
     # Test basic completion
     try:
@@ -50,11 +51,11 @@ def test_openai_integration():
         assistant_response = response.choices[0].message.content
         print("✅ OpenAI API call successful")
         print(f"   Response: {assistant_response}")
-        return True
+        assert assistant_response is not None, "OpenAI should return a response"
         
     except Exception as e:
         print(f"❌ OpenAI API call failed: {e}")
-        return False
+        pytest.fail(f"OpenAI API call failed: {e}")
 
 if __name__ == "__main__":
     test_openai_integration()

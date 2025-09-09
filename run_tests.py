@@ -25,8 +25,12 @@ def run_tests(category=None, verbose=False):
     project_root = Path(__file__).parent
     os.chdir(project_root)
     
-    # Base pytest command
-    cmd = ["python", "-m", "pytest"]
+    # Base pytest command - use venv python
+    venv_python = project_root / ".venv" / "bin" / "python"
+    if venv_python.exists():
+        cmd = [str(venv_python), "-m", "pytest"]
+    else:
+        cmd = ["python", "-m", "pytest"]
     
     if verbose:
         cmd.extend(["-v", "-s"])

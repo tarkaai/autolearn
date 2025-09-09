@@ -15,14 +15,20 @@ This test uses Selenium to automate the browser and test the actual user experie
 import pytest
 import time
 import json
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.keys import Keys
+
+try:
+    from selenium import webdriver
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.common.keys import Keys
+    selenium_available = True
+except ImportError:
+    selenium_available = False
 
 
+@pytest.mark.skipif(not selenium_available, reason="selenium not available")
 class TestFrontendChatIntegration:
     """Test suite for frontend chat integration with skill execution."""
     
