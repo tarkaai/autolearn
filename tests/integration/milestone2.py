@@ -76,7 +76,7 @@ def client():
     app.state.openai_client = mock_client
     
     # Create test client
-    test_client = TestClient(app=app)
+    test_client = TestClient(app)
     
     yield test_client
 

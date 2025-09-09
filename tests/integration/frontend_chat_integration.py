@@ -53,7 +53,7 @@ class TestFrontendChatIntegration:
         wait = WebDriverWait(browser, 10)
         
         # Check that the chat interface elements are present
-        chat_title = wait.until(EC.presence_of_element_located((By.TEXT, "AI Assistant Chat")))
+        chat_title = wait.until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'AI Assistant Chat')]")))
         assert chat_title is not None
         
         # Check for input field
@@ -155,7 +155,7 @@ class TestFrontendChatIntegration:
                 print(f"  - {button.text}")
         
         # Check for suggestions section
-        suggestion_sections = browser.find_elements(By.TEXT, "Skill suggestions:")
+        suggestion_sections = browser.find_elements(By.XPATH, "//*[contains(text(), 'Skill suggestions:')]")
         if len(suggestion_sections) > 0:
             print("✅ Skill suggestions section found")
     
