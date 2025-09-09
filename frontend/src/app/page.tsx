@@ -28,12 +28,8 @@ export default function ChatPage() {
     <MainLayout>
       <div className="container mx-auto p-6 h-[calc(100vh-8rem)] flex flex-col">
         <div className="mb-6 flex-shrink-0">
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <SparklesIcon className="h-8 w-8 text-primary" />
-            AutoLearn Chat
-          </h1>
           <p className="text-muted-foreground mt-2">
-            Chat with an AI agent that can use existing skills and create new ones on demand
+            Chat with an AI agent that can improve its own skills over time
           </p>
         </div>
 

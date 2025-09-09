@@ -101,10 +101,27 @@ class MCPClient:
         
     async def call_tool(self, name: str, arguments: Dict[str, Any]) -> Any:
         """Execute a tool via MCP server."""
+        # Convert complex parameters to JSON strings for portability
+        serialized_args = self._serialize_parameters(arguments)
         return await self.call_method("tools/call", {
             "name": name,
-            "arguments": arguments
+            "arguments": serialized_args
         })
+    
+    def _serialize_parameters(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Serialize complex parameters to JSON strings for MCP portability."""
+        import json
+        serialized = {}
+        
+        for key, value in arguments.items():
+            if isinstance(value, (dict, list)):
+                # Convert complex types to JSON strings
+                serialized[key] = json.dumps(value)
+            else:
+                # Keep simple types as-is
+                serialized[key] = value
+                
+        return serialized
 
 
 class ConsumerAgent:
@@ -235,11 +252,18 @@ Always be helpful, clear, and transparent about what skills you're using or crea
                 "content": msg.content
             })
             
-        # Add current analysis prompt
+        # Add current analysis prompt with simplified context awareness
+        context_hint = ""
+        if len(context.messages) > 1:
+            last_msg = context.messages[-2]  # Previous message
+            if last_msg.role == "assistant" and ("fibonacci" in last_msg.content.lower() or "sequence" in last_msg.content.lower()):
+                if user_message.strip().startswith("to ") or user_message.isdigit():
+                    context_hint = f"\nCONTEXT: User previously asked about fibonacci sequence. Current message '{user_message}' likely specifies number of terms."
+
         analysis_prompt = f"""Available skills/tools:
 {tools_text}
 
-User message: {user_message}
+User message: {user_message}{context_hint}
 
 Please analyze this request and respond with:
 1. A helpful message to the user
@@ -262,18 +286,11 @@ Respond in a natural, conversational way while being clear about what actions yo
                 model=self.openai_client.config.model_name,
                 messages=messages,
                 temperature=self.openai_client.config.temperature,
-                max_tokens=1000
+                max_tokens=500,
+                timeout=15
             )
             
             agent_response = completion.choices[0].message.content
-            
-            # Parse response to determine actions
-            # For now, simple keyword-based detection
-            needs_skill_generation = any(keyword in agent_response.lower() for keyword in [
-                "create a skill", "new skill", "generate a skill", "don't have a skill",
-                "creation of a new skill", "request the creation", "none of the existing skills",
-                "creating this new skill", "i'll request the creation", "go ahead and request"
-            ])
             
             # Suggest relevant existing tools
             suggestions = await self._get_skill_suggestions(user_message, available_tools)
@@ -288,57 +305,111 @@ Respond in a natural, conversational way while being clear about what actions yo
             if executed_tools:
                 # Add tool execution actions
                 actions.extend(executed_tools)
-                # Update the response to include results
+                # Update the response to include results and parameter correction info
                 for tool_result in executed_tools:
-                    if tool_result.get("result"):
-                        agent_response += f"\n\nUsing the {tool_result['skill_name']} skill, the result is: {tool_result['result']}"
+                    # Add parameter correction feedback if present
+                    if "parameter_corrections" in tool_result:
+                        corrections = tool_result["parameter_corrections"]
+                        if corrections.get("successful_correction"):
+                            original_param = corrections.get("problem_parameter", "parameter")
+                            corrected_param = corrections["successful_correction"]
+                            agent_response += f"\n\n🔧 **Parameter Correction**: I noticed the skill expected '{corrected_param}' instead of '{original_param}', so I corrected that for you."
+                        elif corrections.get("corrections_attempted"):
+                            agent_response += f"\n\n⚠️ **Parameter Issue**: I tried to correct some parameter names but the skill still had issues."
+                    
+                    if tool_result.get("result") is not None:
+                        result_value = tool_result['result']
+                        # Check if result contains an error
+                        if isinstance(result_value, str) and result_value.startswith("Error:"):
+                            agent_response += f"\n\n❌ **Error**: {result_value}"
+                            # Add user-friendly explanation for common errors
+                            if "unexpected keyword argument" in result_value:
+                                agent_response += "\n\n💡 This seems to be a parameter mismatch issue. The skill might need an update to handle your request better."
+                        else:
+                            agent_response += f"\n\n✅ **Result**: {result_value}"
             
-            # If no tools were executed and skill generation is needed, attempt to generate it automatically
-            elif needs_skill_generation:
-                logger.info(f"Skill generation needed for message: {user_message}")
-                try:
-                    # Extract skill description from user message and agent response
-                    skill_description = self._extract_skill_description(user_message, agent_response)
-                    logger.info(f"Extracted skill description: {skill_description}")
-                    
-                    # Generate the skill
-                    generation_result = await self.request_skill_generation(
-                        context.session_id, 
-                        skill_description
-                    )
-                    
-                    logger.info(f"Skill generation result: {generation_result}")
-                    
-                    if generation_result["success"]:
-                        actions.append({
-                            "type": "skill_generated",
-                            "skill": generation_result["skill"],
-                            "skill_name": generation_result["skill"].get("name", "unnamed"),
-                            "description": skill_description
-                        })
-                        
-                        # Update agent response to include success message
-                        agent_response = f"{agent_response}\n\n🎉 Great news! I've successfully created a new skill called '{generation_result['skill'].get('name', 'unnamed')}' that can help you with this task!"
-                        
-                        # Mark skill as used since we generated it for this request
-                        skill_name = generation_result["skill"].get("name", "unnamed")
-                        context.skills_used.append(skill_name)
-                        actions.append({
-                            "type": "skill_used",
-                            "skill_name": skill_name
-                        })
-                        
-                except Exception as e:
-                    logger.error(f"Auto skill generation failed: {e}")
-                    # Keep the original response indicating we'll create the skill
+            # Handle cases where AI analysis suggests creating or improving skills
             else:
-                logger.info(f"No skill generation needed. Response: {agent_response[:100]}...")
+                # Re-get the analysis to check what the AI recommended
+                analysis = await self._analyze_skill_requirements(user_message, available_tools, context)
+                
+                if analysis.get("action") == "create":
+                    logger.info(f"AI recommends creating new skill for: {user_message}")
+                    try:
+                        new_skill_info = analysis.get("new_skill", {})
+                        skill_name = new_skill_info.get("name", "")
+                        skill_description = new_skill_info.get("description", "")
+                        uses_existing = new_skill_info.get("uses_existing_skills", [])
+                        rationale = new_skill_info.get("rationale", "")
+                        
+                        # Create enhanced skill description that includes using existing skills
+                        enhanced_description = skill_description
+                        if uses_existing:
+                            enhanced_description += f"\n\nThis skill should utilize these existing skills: {', '.join(uses_existing)}"
+                            enhanced_description += f"\n\nRationale: {rationale}"
+                        
+                        # Generate the skill
+                        generation_result = await self.request_skill_generation(
+                            context.session_id, 
+                            enhanced_description,
+                            skill_name,
+                            available_tools
+                        )
+                        
+                        logger.info(f"Skill generation result: {generation_result}")
+                        
+                        if generation_result["success"]:
+                            actions.append({
+                                "type": "skill_generated",
+                                "skill": generation_result["skill"],
+                                "skill_name": generation_result["skill"].get("name", skill_name),
+                                "description": enhanced_description,
+                                "uses_existing_skills": uses_existing,
+                                "ai_reasoning": analysis.get("reasoning", "")
+                            })
+                            
+                            # Update agent response to include success message
+                            skill_display_name = generation_result["skill"].get("name", skill_name)
+                            agent_response = f"{agent_response}\n\n🎉 I've created a new skill called '{skill_display_name}' that can help you with this task!"
+                            
+                            if uses_existing:
+                                agent_response += f" This skill leverages existing capabilities: {', '.join(uses_existing)}."
+                            
+                            # Mark skill as used since we generated it for this request
+                            context.skills_used.append(skill_display_name)
+                            actions.append({
+                                "type": "skill_used",
+                                "skill_name": skill_display_name
+                            })
+                            
+                    except Exception as e:
+                        logger.error(f"AI-driven skill generation failed: {e}")
+                        
+                elif analysis.get("action") == "improve":
+                    logger.info(f"AI suggests improving existing skill for: {user_message}")
+                    improvement_info = analysis.get("skill_to_improve", {})
+                    actions.append({
+                        "type": "skill_improvement_suggested",
+                        "current_skill": improvement_info.get("current_name"),
+                        "improvements": improvement_info.get("improvements"),
+                        "new_description": improvement_info.get("new_description"),
+                        "ai_reasoning": analysis.get("reasoning", "")
+                    })
+                    
+                    agent_response += f"\n\n💡 I notice that the existing '{improvement_info.get('current_name')}' skill could be improved to better handle your request. Suggested improvements: {improvement_info.get('improvements')}"
+                    
+                else:
+                    logger.info(f"AI analysis complete. No additional actions needed.")
+            
+            needs_generation = len(actions) == 0 and any(keyword in user_message.lower() for keyword in [
+                "create a skill", "new skill", "generate a skill", "make a skill"
+            ])
             
             return {
                 "message": agent_response,
                 "actions": actions,
                 "suggestions": suggestions,
-                "needs_skill_generation": needs_skill_generation and len(actions) == 0,  # False if we successfully generated
+                "needs_skill_generation": needs_generation,
                 "session_id": context.session_id
             }
             
@@ -351,6 +422,125 @@ Respond in a natural, conversational way while being clear about what actions yo
                 "needs_skill_generation": False
             }
             
+    async def _analyze_skill_requirements(
+        self,
+        user_message: str,
+        available_tools: List[Dict[str, Any]],
+        context: Optional[ConversationContext] = None
+    ) -> Dict[str, Any]:
+        """Use OpenAI to analyze user request against available skills and determine action."""
+        
+        # Create a detailed description of available skills
+        skills_description = []
+        for tool in available_tools:
+            skill_info = f"- {tool['name']}: {tool.get('description', 'No description')}"
+            # Handle MCP format with inputSchema
+            if 'inputSchema' in tool and 'properties' in tool['inputSchema']:
+                params = tool['inputSchema']['properties']
+                if params:
+                    param_names = list(params.keys())
+                    skill_info += f" (takes: {', '.join(param_names)})"
+            skills_description.append(skill_info)
+        
+        skills_text = "\n".join(skills_description) if skills_description else "No skills available"
+        
+        # Add simplified conversation context if available
+        context_info = ""
+        if context and len(context.messages) > 1:
+            last_msg = context.messages[-2]  # Previous message  
+            if last_msg.role == "assistant":
+                # Check for specific context patterns
+                if "fibonacci" in last_msg.content.lower() and ("to " in user_message or user_message.isdigit()):
+                    context_info = f"\nCONTEXT: Previous request was about fibonacci sequence. '{user_message}' likely specifies the number of terms."
+                elif "calculate" in last_msg.content.lower() and any(c.isdigit() for c in user_message):
+                    context_info = f"\nCONTEXT: Previous request was about calculation. '{user_message}' likely provides numbers/parameters."
+        
+        analysis_prompt = f"""You are an intelligent skill orchestrator. Analyze the user's request against available skills and determine the best action.
+
+Available Skills:
+{skills_text}{context_info}
+
+User Request: "{user_message}"
+
+Please analyze this request and respond with a JSON object containing your decision:
+
+{{
+  "action": "execute|improve|create",
+  "reasoning": "brief explanation of your decision",
+  "skill_to_execute": {{
+    "name": "skill_name",
+    "parameters": {{"param1": "value1", "param2": "value2"}}
+  }},
+  "skill_to_improve": {{
+    "current_name": "existing_skill_name",
+    "improvements": "what improvements are needed",
+    "new_description": "improved skill description"
+  }},
+  "new_skill": {{
+    "name": "proposed_skill_name",
+    "description": "what the new skill should do",
+    "uses_existing_skills": ["skill1", "skill2"],
+    "rationale": "why a new skill is needed"
+  }}
+}}
+
+Decision Guidelines:
+1. Choose "execute" if an existing skill can directly handle the request
+2. Choose "improve" if an existing skill is close but needs to be more general/better
+3. Choose "create" if no existing skill can handle the request, but consider how the new skill could use existing ones
+
+For "execute": Fill in skill_to_execute, leave others null
+For "improve": Fill in skill_to_improve, leave others null  
+For "create": Fill in new_skill, leave others null
+
+CRITICAL: When using "execute", you MUST use the exact parameter names shown in parentheses after "(takes: ...)". 
+IGNORE any parameter names mentioned in the skill description text - only use the names listed after "(takes: )".
+For example, if a skill shows "(takes: num_terms, radius)" then use exactly: {{"num_terms": 10, "radius": 5}}.
+Do NOT use parameter names from the description text, even if they seem similar.
+
+Be intelligent about parameter extraction - if the user provides specific values, extract them for execution using the EXACT parameter names from the skill schema."""
+
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=self.openai_client.config.api_key)
+            
+            completion = client.chat.completions.create(
+                model=self.openai_client.config.model_name,
+                messages=[{
+                    "role": "user",
+                    "content": analysis_prompt
+                }],
+                temperature=0.1,  # Low temperature for consistent analysis
+                max_tokens=500,
+                timeout=15
+            )
+            
+            response_text = completion.choices[0].message.content
+            
+            # Try to parse the JSON response
+            import json
+            try:
+                # Extract JSON from response (in case there's extra text)
+                json_start = response_text.find('{')
+                json_end = response_text.rfind('}') + 1
+                if json_start >= 0 and json_end > json_start:
+                    json_str = response_text[json_start:json_end]
+                    analysis = json.loads(json_str)
+                else:
+                    # Fallback if no JSON structure found
+                    analysis = {"action": "create", "reasoning": "Could not parse analysis"}
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse skill analysis JSON: {e}")
+                logger.error(f"Raw response: {response_text}")
+                # Fallback analysis
+                analysis = {"action": "create", "reasoning": "JSON parsing failed"}
+            
+            return analysis
+            
+        except Exception as e:
+            logger.error(f"Error in skill analysis: {e}")
+            return {"action": "create", "reasoning": f"Analysis failed: {str(e)}"}
+
     async def _try_execute_relevant_tools(
         self, 
         user_message: str, 
@@ -358,121 +548,326 @@ Respond in a natural, conversational way while being clear about what actions yo
         available_tools: List[Dict[str, Any]], 
         context: ConversationContext
     ) -> List[Dict[str, Any]]:
-        """Try to execute relevant existing tools based on user message and agent response."""
+        """Use AI analysis to determine and execute relevant tools."""
         
         executed_actions = []
-        user_lower = user_message.lower()
-        response_lower = agent_response.lower()
         
-        # Check for mathematical operations that existing tools can handle
+        # Get AI analysis of what should be done
+        analysis = await self._analyze_skill_requirements(user_message, available_tools, context)
+        logger.info(f"Skill analysis result: {analysis}")
+        
         async with MCPClient(self.mcp_server_url) as mcp:
             try:
-                # Addition patterns
-                if any(keyword in user_lower for keyword in ["add", "plus", "+", "sum"]):
-                    # Try to extract two numbers for addition
-                    import re
-                    numbers = re.findall(r'\b\d+(?:\.\d+)?\b', user_message)
-                    if len(numbers) >= 2:
-                        a, b = float(numbers[0]), float(numbers[1])
+                if analysis.get("action") == "execute":
+                    # Execute the recommended skill with intelligent parameter mapping and error recovery
+                    skill_info = analysis.get("skill_to_execute", {})
+                    skill_name = skill_info.get("name")
+                    parameters = skill_info.get("parameters", {})
+                    
+                    if skill_name and any(tool["name"] == skill_name for tool in available_tools):
+                        # Get the tool definition for parameter mapping
+                        skill_tool = next((tool for tool in available_tools if tool["name"] == skill_name), None)
                         
-                        # Check if add_two_numbers tool is available
-                        if any(tool["name"] == "add_two_numbers" for tool in available_tools):
-                            result = await mcp.call_tool("add_two_numbers", {"a": a, "b": b})
-                            executed_actions.append({
-                                "type": "skill_used",
-                                "skill_name": "add_two_numbers", 
-                                "result": result,
-                                "inputs": {"a": a, "b": b}
-                            })
-                            context.skills_used.append("add_two_numbers")
+                        # Apply intelligent parameter mapping
+                        mapped_parameters = self._map_parameters_intelligently(
+                            parameters, skill_tool, user_message
+                        )
+                        
+                        logger.info(f"Executing skill: {skill_name} with params: {mapped_parameters}")
+                        
+                        # Execute with error recovery
+                        result, retry_info = await self._execute_skill_with_retry(
+                            mcp, skill_name, mapped_parameters, skill_tool
+                        )
+                        
+                        clean_result = self._extract_result_value(result)
+                        
+                        action = {
+                            "type": "skill_used",
+                            "skill_name": skill_name,
+                            "result": clean_result,
+                            "raw_result": result,
+                            "inputs": mapped_parameters,
+                            "ai_reasoning": analysis.get("reasoning", "")
+                        }
+                        
+                        # Add retry information if there was parameter correction
+                        if retry_info:
+                            action["parameter_corrections"] = retry_info
+                        
+                        executed_actions.append(action)
+                        context.skills_used.append(skill_name)
+                    else:
+                        logger.warning(f"Recommended skill '{skill_name}' not found in available tools")
                 
-                # Multiplication patterns  
-                elif any(keyword in user_lower for keyword in ["multiply", "times", "*", "product"]):
-                    import re
-                    numbers = re.findall(r'\b\d+(?:\.\d+)?\b', user_message)
-                    if len(numbers) >= 2:
-                        a, b = float(numbers[0]), float(numbers[1])
-                        
-                        if any(tool["name"] == "multiply_numbers" for tool in available_tools):
-                            result = await mcp.call_tool("multiply_numbers", {"a": a, "b": b})
-                            executed_actions.append({
-                                "type": "skill_used",
-                                "skill_name": "multiply_numbers",
-                                "result": result,
-                                "inputs": {"a": a, "b": b}
-                            })
-                            context.skills_used.append("multiply_numbers")
+                elif analysis.get("action") == "improve":
+                    # Store improvement suggestion for later processing
+                    improvement_info = analysis.get("skill_to_improve", {})
+                    executed_actions.append({
+                        "type": "skill_improvement_suggested",
+                        "current_skill": improvement_info.get("current_name"),
+                        "improvements": improvement_info.get("improvements"),
+                        "new_description": improvement_info.get("new_description"),
+                        "ai_reasoning": analysis.get("reasoning", "")
+                    })
                 
-                # Calculator patterns (for general arithmetic)
-                elif any(keyword in user_lower for keyword in ["calculate", "compute"]) and not executed_actions:
-                    import re
-                    numbers = re.findall(r'\b\d+(?:\.\d+)?\b', user_message)
-                    if len(numbers) >= 2:
-                        a, b = float(numbers[0]), float(numbers[1])
-                        
-                        # Determine operation
-                        operation = None
-                        if any(op in user_lower for op in ["add", "plus", "+"]):
-                            operation = "add"
-                        elif any(op in user_lower for op in ["subtract", "minus", "-"]):
-                            operation = "subtract" 
-                        elif any(op in user_lower for op in ["multiply", "times", "*"]):
-                            operation = "multiply"
-                        elif any(op in user_lower for op in ["divide", "/"]):
-                            operation = "divide"
-                        
-                        if operation and any(tool["name"] == "calculator" for tool in available_tools):
-                            result = await mcp.call_tool("calculator", {
-                                "operation": operation, 
-                                "a": a, 
-                                "b": b
-                            })
-                            executed_actions.append({
-                                "type": "skill_used",
-                                "skill_name": "calculator",
-                                "result": result,
-                                "inputs": {"operation": operation, "a": a, "b": b}
-                            })
-                            context.skills_used.append("calculator")
-                
-                # Circle area patterns
-                elif any(keyword in user_lower for keyword in ["circle", "area"]) and "radius" in user_lower:
-                    import re
-                    numbers = re.findall(r'\b\d+(?:\.\d+)?\b', user_message)
-                    if numbers:
-                        radius = float(numbers[0])
-                        
-                        if any(tool["name"] == "calculate_circle_area" for tool in available_tools):
-                            result = await mcp.call_tool("calculate_circle_area", {"radius": radius})
-                            executed_actions.append({
-                                "type": "skill_used",
-                                "skill_name": "calculate_circle_area",
-                                "result": result,
-                                "inputs": {"radius": radius}
-                            })
-                            context.skills_used.append("calculate_circle_area")
-                
-                # Square root patterns
-                elif any(keyword in user_lower for keyword in ["square root", "sqrt"]):
-                    import re
-                    numbers = re.findall(r'\b\d+(?:\.\d+)?\b', user_message)
-                    if numbers:
-                        number = float(numbers[0])
-                        
-                        if any(tool["name"] == "calculate_square_root" for tool in available_tools):
-                            result = await mcp.call_tool("calculate_square_root", {"number": number})
-                            executed_actions.append({
-                                "type": "skill_used",
-                                "skill_name": "calculate_square_root",
-                                "result": result,
-                                "inputs": {"number": number}
-                            })
-                            context.skills_used.append("calculate_square_root")
+                # For "create" action, we'll handle this in the calling function
                 
             except Exception as e:
-                logger.error(f"Error executing tools: {e}")
+                logger.error(f"Error executing AI-recommended actions: {e}")
         
         return executed_actions
+    
+    async def _attempt_skill_improvement(
+        self, 
+        skill_name: str, 
+        error_message: str,
+        failed_parameters: Dict[str, Any]
+    ) -> bool:
+        """Attempt to automatically improve a failing skill."""
+        try:
+            # Get current skill code
+            response = await self.session.get(f"{self.mcp_server_url}/skills/{skill_name}/code")
+            if response.status_code != 200:
+                return False
+            
+            skill_data = response.json()
+            current_code = skill_data.get("code", "")
+                
+            # Generate improvement prompt based on the error
+            if "unexpected keyword argument" in error_message:
+                # Extract parameter name from error
+                import re
+                match = re.search(r"unexpected keyword argument '(\w+)'", error_message)
+                problem_param = match.group(1) if match else "parameter"
+                
+                improvement_prompt = f"""Fix parameter mismatch error: The consumer agent is calling this skill with parameter '{problem_param}' but the skill function expects a different parameter name. 
+                
+Error: {error_message}
+Parameters sent: {list(failed_parameters.keys())}
+
+Update the function signature to accept the parameter name '{problem_param}' that the consumer agent is sending. This is a parameter naming issue, not a logic issue."""
+            else:
+                improvement_prompt = f"""Fix the following error in this skill:
+
+Error: {error_message}
+Parameters sent: {failed_parameters}
+
+Please analyze and fix the issue while maintaining the skill's core functionality."""
+            
+            # Call improvement endpoint
+            improvement_request = {
+                "skill_name": skill_name,
+                "current_code": current_code,
+                "improvement_prompt": improvement_prompt
+            }
+            
+            response = await self.session.post(
+                f"{self.mcp_server_url}/skills/improve",
+                json=improvement_request,
+                timeout=60.0
+            )
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("success"):
+                    logger.info(f"Successfully improved skill {skill_name}")
+                    return True
+                        
+            return False
+            
+        except Exception as e:
+            logger.error(f"Failed to improve skill {skill_name}: {e}")
+            return False
+    
+    def _map_parameters_intelligently(
+        self, 
+        original_params: Dict[str, Any], 
+        skill_tool: Dict[str, Any], 
+        user_message: str
+    ) -> Dict[str, Any]:
+        """Map parameters intelligently by understanding common parameter name variations."""
+        if not skill_tool or "inputSchema" not in skill_tool:
+            return original_params
+            
+        expected_params = skill_tool["inputSchema"].get("properties", {})
+        if not expected_params:
+            return original_params
+            
+        mapped_params = {}
+        
+        # Common parameter mappings
+        parameter_mappings = {
+            # Fibonacci sequence variations
+            "terms": ["n_terms", "num_terms", "count", "length"],
+            "count": ["n_terms", "num_terms", "terms", "length"], 
+            "number": ["n_terms", "num_terms", "count", "n"],
+            "n": ["n_terms", "num_terms", "number"],
+            
+            # Number/calculation variations
+            "num": ["number", "n", "value"],
+            "value": ["number", "n", "num"],
+            
+            # General variations
+            "text": ["string", "str", "input"],
+            "string": ["text", "str", "input"],
+            "input": ["text", "string", "str"],
+        }
+        
+        for param_name, param_value in original_params.items():
+            # First, try exact match
+            if param_name in expected_params:
+                mapped_params[param_name] = param_value
+                continue
+                
+            # Try to find a mapping
+            mapped = False
+            if param_name in parameter_mappings:
+                for candidate in parameter_mappings[param_name]:
+                    if candidate in expected_params:
+                        mapped_params[candidate] = param_value
+                        logger.info(f"Parameter mapping: {param_name} -> {candidate}")
+                        mapped = True
+                        break
+            
+            # If no mapping found, keep original (might still work)
+            if not mapped:
+                mapped_params[param_name] = param_value
+                
+        return mapped_params
+    
+    async def _execute_skill_with_retry(
+        self, 
+        mcp: MCPClient, 
+        skill_name: str, 
+        parameters: Dict[str, Any], 
+        skill_tool: Dict[str, Any]
+    ) -> tuple[Any, Optional[Dict[str, Any]]]:
+        """Execute skill with intelligent retry on parameter errors."""
+        retry_info = None
+        
+        try:
+            # First attempt
+            result = await mcp.call_tool(skill_name, parameters)
+            
+            # Check if the result contains an error (MCP errors come back as results)
+            if isinstance(result, dict) and "error" in result:
+                error_str = str(result["error"])
+                if "unexpected keyword argument" in error_str:
+                    # Handle the error as if it was an exception
+                    raise Exception(error_str)
+            
+            return result, retry_info
+            
+        except Exception as e:
+            error_str = str(e)
+            
+            # Check for parameter mismatch errors (both in exceptions and MCP error responses)
+            if "unexpected keyword argument" in error_str or "got an unexpected keyword argument" in error_str:
+                retry_info = {"original_error": error_str, "corrections_attempted": []}
+                
+                # Extract the problematic parameter from error message
+                # Error format: "function() got an unexpected keyword argument 'param_name'"
+                import re
+                match = re.search(r"unexpected keyword argument '(\w+)'", error_str)
+                if match:
+                    problem_param = match.group(1)
+                    retry_info["problem_parameter"] = problem_param
+                    
+                    # Try to find the correct parameter name
+                    expected_params = skill_tool.get("inputSchema", {}).get("properties", {})
+                    
+                    # Remove the problematic parameter and try common variations
+                    corrected_params = {k: v for k, v in parameters.items() if k != problem_param}
+                    problem_value = parameters.get(problem_param)
+                    
+                    # Common parameter name corrections
+                    corrections_to_try = []
+                    if problem_param == "terms":
+                        corrections_to_try = ["n_terms", "num_terms", "count"]
+                    elif problem_param == "count":
+                        corrections_to_try = ["n_terms", "terms", "num_terms"]
+                    elif problem_param == "number":
+                        corrections_to_try = ["n", "num", "value"]
+                    
+                    # Try each correction
+                    for correction in corrections_to_try:
+                        if correction in expected_params:
+                            corrected_params[correction] = problem_value
+                            retry_info["corrections_attempted"].append({
+                                "from": problem_param,
+                                "to": correction,
+                                "value": problem_value
+                            })
+                            
+                            logger.info(f"Retrying {skill_name} with parameter correction: {problem_param} -> {correction}")
+                            
+                            try:
+                                result = await mcp.call_tool(skill_name, corrected_params)
+                                
+                                # Check if retry result also has an error
+                                if isinstance(result, dict) and "error" in result:
+                                    logger.warning(f"Retry with {correction} failed: {result['error']}")
+                                    continue
+                                    
+                                retry_info["successful_correction"] = correction
+                                return result, retry_info
+                            except Exception as retry_e:
+                                logger.warning(f"Retry with {correction} failed: {retry_e}")
+                                continue
+            
+            # If no successful retry, try automatic skill improvement
+            logger.info(f"Parameter retries failed for {skill_name}, attempting automatic improvement")
+            
+            try:
+                improved = await self._attempt_skill_improvement(skill_name, error_str, parameters)
+                if improved:
+                    logger.info(f"Successfully improved skill {skill_name}, retrying...")
+                    # Retry with original parameters after improvement
+                    result = await mcp.call_tool(skill_name, parameters)
+                    if not (isinstance(result, dict) and "error" in result):
+                        retry_info["automatic_improvement"] = True
+                        return result, retry_info
+            except Exception as improvement_error:
+                logger.warning(f"Automatic improvement failed: {improvement_error}")
+            
+            # If no successful retry or improvement, return original error as a result (not exception)
+            return {"error": error_str}, retry_info
+    
+    def _is_complex_request(self, user_message: str, available_tools: List[Dict[str, Any]]) -> bool:
+        """Determine if a user request is complex enough to warrant skill creation."""
+        user_lower = user_message.lower()
+        
+        # Simple requests that don't need new skills
+        simple_patterns = [
+            "hello", "hi", "hey", "thanks", "thank you", "what can you help",
+            "what can you do", "list skills", "show capabilities", "help",
+            "how are you", "who are you", "what are you"
+        ]
+        
+        if any(pattern in user_lower for pattern in simple_patterns):
+            return False
+            
+        # Requests that are already covered by existing tools
+        covered_patterns = []
+        for tool in available_tools:
+            tool_name = tool.get("name", "").lower()
+            tool_desc = tool.get("description", "").lower()
+            
+            # Add patterns based on existing tool capabilities
+            if "add" in tool_name or "addition" in tool_desc:
+                covered_patterns.extend(["add", "plus", "sum"])
+            if "multiply" in tool_name or "multiplication" in tool_desc:
+                covered_patterns.extend(["multiply", "times", "product"])
+            if "calculator" in tool_name:
+                covered_patterns.extend(["calculate", "compute"])
+            if "count" in tool_name:
+                covered_patterns.extend(["count", "how many"])
+                
+        if any(pattern in user_lower for pattern in covered_patterns):
+            return False
+            
+        # Consider it complex if it's not a simple greeting/question and not covered
+        return len(user_message.strip()) > 10
     
     def _extract_skill_description(self, user_message: str, agent_response: str) -> str:
         """Extract a skill description from user message and agent response."""
@@ -497,6 +892,36 @@ Respond in a natural, conversational way while being clear about what actions yo
         # Fallback: use the entire user message
         return user_message
     
+    def _extract_result_value(self, mcp_result: Any) -> Any:
+        """Extract the actual value from MCP result format."""
+        try:
+            # Handle the nested structure: {'content': [{'type': 'text', 'text': "{'result': 8.0}"}], 'isError': False}
+            if isinstance(mcp_result, dict):
+                if 'content' in mcp_result and isinstance(mcp_result['content'], list):
+                    for content_item in mcp_result['content']:
+                        if isinstance(content_item, dict) and content_item.get('type') == 'text':
+                            text = content_item.get('text', '')
+                            if text:
+                                # Try to parse as JSON/dict
+                                try:
+                                    import ast
+                                    parsed = ast.literal_eval(text)
+                                    if isinstance(parsed, dict) and 'result' in parsed:
+                                        return parsed['result']
+                                except:
+                                    pass
+                                # Fallback: return the text
+                                return text
+                # If no content found, check if there's a direct result
+                if 'result' in mcp_result:
+                    return mcp_result['result']
+            
+            # Fallback: return the original result
+            return mcp_result
+        except Exception as e:
+            logger.warning(f"Failed to extract result value: {e}")
+            return mcp_result
+    
     async def _get_skill_suggestions(
         self, 
         user_message: str, 
@@ -507,37 +932,68 @@ Respond in a natural, conversational way while being clear about what actions yo
         suggestions = []
         user_lower = user_message.lower()
         
+        # Don't suggest skills for basic math that we can already handle
+        basic_math_keywords = ["add", "plus", "+", "sum", "multiply", "times", "*", "subtract", "minus", "divide"]
+        if any(keyword in user_lower for keyword in basic_math_keywords):
+            # For basic math, we don't need suggestions since we handle it automatically
+            return []
+        
         for tool in available_tools:
             name = tool.get("name", "")
             description = tool.get("description", "")
             
-            # Simple relevance scoring based on keyword matching
+            # More sophisticated relevance scoring
             relevance = 0.0
             words = user_lower.split()
             
+            # Higher score for exact name matches in user message
+            if name.lower() in user_lower:
+                relevance += 0.8
+                
+            # Score for individual word matches
             for word in words:
-                if word in name.lower():
-                    relevance += 0.3
-                if word in description.lower():
-                    relevance += 0.2
+                if len(word) > 3:  # Only consider meaningful words
+                    if word in name.lower():
+                        relevance += 0.4
+                    if word in description.lower():
+                        relevance += 0.3
+            
+            # Special scoring for specific skill types that might be genuinely useful
+            if "help" in user_lower or "what can you do" in user_lower:
+                if "list" in name.lower():
+                    relevance += 0.5
                     
-            if relevance > 0.1:  # Only suggest if somewhat relevant
+            # Only suggest if highly relevant (raised threshold)
+            if relevance >= 0.6:
                 suggestions.append(SkillSuggestion(
                     skill_name=name,
                     description=description,
                     relevance_score=min(relevance, 1.0),
-                    reason=f"Matches keywords from your request"
+                    reason=self._get_suggestion_reason(name, description, user_message)
                 ))
                 
-        # Sort by relevance and return top 3
+        # Sort by relevance and return top 2 (reduced from 3)
         suggestions.sort(key=lambda x: x.relevance_score, reverse=True)
-        return suggestions[:3]
+        return suggestions[:2]
+    
+    def _get_suggestion_reason(self, skill_name: str, description: str, user_message: str) -> str:
+        """Generate a specific reason for why this skill is suggested."""
+        user_lower = user_message.lower()
+        
+        if skill_name.lower() in user_lower:
+            return f"You mentioned '{skill_name}' directly"
+        
+        if "help" in user_lower or "what can you do" in user_lower:
+            return "This skill can help you explore available capabilities"
+            
+        return "This skill seems relevant to your request"
         
     async def request_skill_generation(
         self, 
         session_id: str, 
         skill_description: str,
-        skill_name: Optional[str] = None
+        skill_name: Optional[str] = None,
+        available_skills: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
         """Request generation of a new skill from AutoLearn server."""
         
@@ -546,10 +1002,25 @@ Respond in a natural, conversational way while being clear about what actions yo
             from .openai_client import get_openai_client
             from .schemas import GenerateSkillRequest
             
+            # Enhance the description with available skills context
+            enhanced_description = skill_description
+            if available_skills:
+                skills_context = "\n\nAvailable skills that can be called from this new skill:\n"
+                for skill in available_skills:
+                    skills_context += f"- {skill['name']}: {skill.get('description', 'No description')}\n"
+                    if 'inputSchema' in skill and 'properties' in skill['inputSchema']:
+                        params = skill['inputSchema']['properties']
+                        if params:
+                            param_info = ", ".join(f"{k}: {v.get('type', 'any')}" for k, v in params.items())
+                            skills_context += f"  Parameters: {param_info}\n"
+                
+                enhanced_description += skills_context
+                enhanced_description += "\nNote: This skill should use existing skills when appropriate by calling them with proper parameters."
+            
             # Get the configured OpenAI client and generation request
             openai_client = get_openai_client()
             generation_req = GenerateSkillRequest(
-                description=skill_description,
+                description=enhanced_description,
                 name=skill_name
             )
             

@@ -11,11 +11,10 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from fastapi.testclient import TestClient
-
 from backend.app import app
 
 
-client = TestClient(app)
+client = TestClient(app=app)
 
 
 def test_health():

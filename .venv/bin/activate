@@ -67,3 +67,11 @@ fi
 if [ -n "${BASH:-}" -o -n "${ZSH_VERSION:-}" ] ; then
     hash -r 2> /dev/null
 fi
+
+# Auto-load .env file if it exists
+if [ -f "${VIRTUAL_ENV}/../.env" ]; then
+    echo "Loading environment variables from .env..."
+    set -a  # automatically export all variables
+    source "${VIRTUAL_ENV}/../.env"
+    set +a  # turn off automatic export
+fi

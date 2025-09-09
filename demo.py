@@ -110,8 +110,7 @@ def open_browser():
     print_header("OPENING BROWSER")
     
     urls_to_try = [
-        "http://localhost:3000/user-mode",  # User mode page
-        "http://localhost:3000"            # Main page with navigation
+        "http://localhost:3000/",
     ]
     
     for url in urls_to_try:
@@ -127,14 +126,12 @@ def print_demo_instructions():
     print_header("MILESTONE 4 DEMO INSTRUCTIONS")
     
     instructions = """
-🎯 AUTOLEARN USER MODE DEMO
+🎯 AUTOLEARN DEMO
 
 The demo is now running! Here's how to test the auto-learning functionality:
 
-1. NAVIGATE TO USER MODE:
+1. NAVIGATE TO THE APP:
    • Go to http://localhost:3000
-   • Click on "User Mode" in the navigation
-   • Or go directly to http://localhost:3000/user-mode
 
 2. CHAT WITH THE AI ASSISTANT:
    • Type messages in the chat interface
@@ -218,9 +215,8 @@ def main():
     print_colored("""
     ╔═══════════════════════════════════════════════════════════╗
     ║                                                           ║
-    ║               🚀 AUTOLEARN MILESTONE 4 DEMO               ║
+    ║               🚀 AUTOLEARN DEMO                           ║
     ║                                                           ║
-    ║            User Mode with Auto-Learning Skills            ║
     ║                                                           ║
     ╚═══════════════════════════════════════════════════════════╝
     """, Colors.HEADER)
@@ -249,7 +245,6 @@ def main():
         print_colored("✅ Demo is now running!", Colors.OKGREEN)
         print_colored("🌐 Frontend: http://localhost:3000", Colors.OKCYAN)
         print_colored("🔧 Backend: http://localhost:8000", Colors.OKCYAN)
-        print_colored("📚 User Mode: http://localhost:3000/user-mode", Colors.OKCYAN)
         print_colored("\n💡 Press Ctrl+C to stop the demo", Colors.WARNING)
         
         # Keep running until interrupted

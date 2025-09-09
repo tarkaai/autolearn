@@ -63,7 +63,7 @@ export default function UserChat({ onSkillGenerated, onSkillUsed }: UserChatProp
       // Add welcome message
       setMessages([{
         role: "assistant",
-        content: "Hi! I'm your AI assistant. I can help you by using existing skills or creating new ones when needed. What would you like to do today?",
+        content: "Hi! I'm AutoLearn. I can help you by using existing skills or creating new ones when needed. What would you like to do today?",
         timestamp: new Date().toISOString()
       }]);
     } catch (error) {
@@ -119,6 +119,11 @@ export default function UserChat({ onSkillGenerated, onSkillUsed }: UserChatProp
 
       // Notify parent of any actions
       if (response.actions && response.actions.length > 0) {
+        const skillsUsed = response.actions.filter(action => action.type === "skill_used");
+        if (skillsUsed.length > 0) {
+          toast.success(`Successfully executed ${skillsUsed.length} skill${skillsUsed.length > 1 ? 's' : ''}: ${skillsUsed.map(a => a.skill_name).join(', ')}`);
+        }
+        
         response.actions.forEach(action => {
           if (action.type === "skill_used" && onSkillUsed) {
             onSkillUsed(action.skill_name);
@@ -246,15 +251,53 @@ export default function UserChat({ onSkillGenerated, onSkillUsed }: UserChatProp
                   )}
                 </div>
 
-                {/* Skill suggestions */}
-                {message.suggestions && message.suggestions.length > 0 && (
+                {/* Actions/Skills executed */}
+                {message.actions && message.actions.length > 0 && (
+                  <div className="ml-11 space-y-2">
+                    <p className="text-sm text-muted-foreground flex items-center gap-1">
+                      <SparklesIcon className="h-3 w-3" />
+                      Skills executed:
+                    </p>
+                    <div className="space-y-1">
+                      {message.actions.map((action, idx) => (
+                        action.type === "skill_used" && (
+                          <div key={idx} className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-2">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100">
+                                ✅ {action.skill_name}
+                              </Badge>
+                              {action.inputs && (
+                                <span className="text-xs text-muted-foreground">
+                                  ({Object.entries(action.inputs).map(([key, value]) => `${key}: ${value}`).join(', ')})
+                                </span>
+                              )}
+                            </div>
+                            {action.result && (
+                              <div className="mt-1 text-xs text-green-700 dark:text-green-300 font-mono">
+                                Result: {typeof action.result === 'object' ? JSON.stringify(action.result) : action.result}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Skill suggestions - only show if no skills were executed and suggestions are highly relevant */}
+                {message.suggestions && message.suggestions.length > 0 && 
+                 (!message.actions || message.actions.length === 0) &&
+                 message.suggestions.some(s => s.relevance_score > 0.6) && (
                   <div className="ml-11 space-y-2">
                     <p className="text-sm text-muted-foreground flex items-center gap-1">
                       <LightbulbIcon className="h-3 w-3" />
-                      Skill suggestions:
+                      Suggested skills:
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {message.suggestions.map((suggestion, idx) => (
+                      {message.suggestions
+                        .filter(s => s.relevance_score > 0.6)
+                        .slice(0, 3)
+                        .map((suggestion, idx) => (
                         <Button
                           key={idx}
                           variant="outline"
@@ -305,15 +348,18 @@ export default function UserChat({ onSkillGenerated, onSkillUsed }: UserChatProp
         <div className="flex-shrink-0">
           <Separator />
 
-          {/* Current suggestions */}
-          {suggestions.length > 0 && (
+          {/* Current suggestions - only show high-quality suggestions */}
+          {suggestions.length > 0 && suggestions.some(s => s.relevance_score > 0.7) && (
             <div className="space-y-2 mt-4">
               <p className="text-sm text-muted-foreground flex items-center gap-1">
                 <LightbulbIcon className="h-3 w-3" />
-                Available skills:
+                Relevant skills:
               </p>
               <div className="flex flex-wrap gap-2">
-                {suggestions.slice(0, 5).map((suggestion, idx) => (
+                {suggestions
+                  .filter(s => s.relevance_score > 0.7)
+                  .slice(0, 3)
+                  .map((suggestion, idx) => (
                   <Button
                     key={idx}
                     variant="outline"
@@ -338,7 +384,7 @@ export default function UserChat({ onSkillGenerated, onSkillUsed }: UserChatProp
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Ask me anything... I can use existing skills or create new ones!"
+              placeholder="Ask me anything... I can use skills, improve on them, and even create new ones!"
               disabled={isLoading}
               className="flex-1"
             />

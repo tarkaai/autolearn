@@ -512,6 +512,10 @@ Please provide an improved version of this skill that addresses the improvement 
             inputs=meta_dict.get("inputs", current_meta.inputs)
         )
         
+        # Register the improved skill (this replaces the old one)
+        engine.register_from_code(result.code, meta, persist=True)
+        logger.info(f"Successfully improved and registered skill: {req.skill_name}")
+        
         return ImproveSkillResponse(
             success=True,
             code=result.code,
