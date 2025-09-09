@@ -243,8 +243,10 @@ class MCPProtocolHandler:
     
     async def _handle_tools_list(self, request: MCPRequest) -> Dict[str, Any]:
         """Handle tools/list request - return available skills as MCP tools."""
+        # Auto-initialize if not already initialized (for backwards compatibility)
         if not self.initialized:
-            raise Exception("Not initialized")
+            logger.info("Auto-initializing MCP handler for tools/list request")
+            self.initialized = True
         
         if not self.skill_engine:
             return {"tools": []}
@@ -274,8 +276,10 @@ class MCPProtocolHandler:
     
     async def _handle_tools_call(self, request: MCPRequest) -> Dict[str, Any]:
         """Handle tools/call request - execute a skill."""
+        # Auto-initialize if not already initialized (for backwards compatibility)
         if not self.initialized:
-            raise Exception("Not initialized")
+            logger.info("Auto-initializing MCP handler for tools/call request")
+            self.initialized = True
         
         if not self.skill_engine:
             raise Exception("No skill engine available")

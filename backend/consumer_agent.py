@@ -96,7 +96,8 @@ class MCPClient:
             
     async def list_tools(self) -> List[Dict[str, Any]]:
         """Get list of available tools from MCP server."""
-        return await self.call_method("tools/list")
+        result = await self.call_method("tools/list")
+        return result.get("tools", [])
         
     async def call_tool(self, name: str, arguments: Dict[str, Any]) -> Any:
         """Execute a tool via MCP server."""

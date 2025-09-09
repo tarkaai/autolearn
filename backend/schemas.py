@@ -58,6 +58,23 @@ class RegisterSkillResponse(BaseModel):
     error: Optional[str] = None
 
 
+class ImproveSkillRequest(BaseModel):
+    """Request to improve an existing skill."""
+    
+    skill_name: str = Field(..., description="Name of the skill to improve")
+    current_code: str = Field(..., description="Current code of the skill")
+    improvement_prompt: str = Field(..., description="Description of how to improve the skill")
+
+
+class ImproveSkillResponse(BaseModel):
+    """Response with improved skill code and metadata."""
+    
+    success: bool = Field(..., description="Whether improvement was successful")
+    code: Optional[str] = Field(None, description="Improved Python code")
+    meta: Optional[SkillMeta] = Field(None, description="Updated skill metadata")
+    error: Optional[str] = Field(None, description="Error message if improvement failed")
+
+
 class GetSkillCodeResponse(BaseModel):
     """Response containing a skill's source code."""
     

@@ -21,6 +21,8 @@ from .schemas import (
     GenerateSkillResponse, 
     RegisterSkillRequest, 
     RegisterSkillResponse,
+    ImproveSkillRequest,
+    ImproveSkillResponse,
     GetSkillCodeResponse,
     RunRequest, 
     RunResponse, 
@@ -452,6 +454,78 @@ async def delete_skill(
         raise HTTPException(status_code=500, detail=f"Error unregistering skill: {str(e)}")
 
 
+@app.post("/skills/improve")
+async def improve_skill(
+    req: ImproveSkillRequest,
+    openai_client: OpenAIClient = Depends(get_openai_client),
+    engine: SkillEngine = Depends(get_engine)
+) -> ImproveSkillResponse:
+    """Improve an existing skill based on user prompt."""
+    try:
+        # Check if the skill exists
+        if req.skill_name not in engine._registry:
+            return ImproveSkillResponse(
+                success=False,
+                error=f"Skill '{req.skill_name}' not found"
+            )
+        
+        # Get current skill metadata from registry
+        current_meta, _ = engine._registry[req.skill_name]
+        
+        # Create improvement prompt that includes current code and improvement request
+        improvement_description = f"""
+Improve the following Python skill:
+
+Current skill name: {req.skill_name}
+Current description: {current_meta.description}
+
+Current code:
+```python
+{req.current_code}
+```
+
+Improvement request: {req.improvement_prompt}
+
+Please provide an improved version of this skill that addresses the improvement request while maintaining compatibility with the existing function signature where possible. The improved skill should be better, more robust, or have additional functionality as requested.
+"""
+        
+        # Convert our API schema to OpenAI client schema
+        generation_req = SkillGenerationRequest(
+            description=improvement_description,
+            name=req.skill_name,
+            inputs=current_meta.inputs
+        )
+        
+        # Call OpenAI to generate the improved code
+        result = openai_client.generate_skill_code(generation_req)
+        
+        # Convert the result to our API schema
+        meta_dict = result.meta
+        if not isinstance(meta_dict, dict):
+            raise ValueError("Generated metadata is not a dictionary")
+            
+        # Create a proper SkillMeta object from the dict, preserving name
+        meta = SkillMeta(
+            name=req.skill_name,  # Keep original name
+            description=meta_dict.get("description", current_meta.description),
+            version=current_meta.version,  # Keep current version for now
+            inputs=meta_dict.get("inputs", current_meta.inputs)
+        )
+        
+        return ImproveSkillResponse(
+            success=True,
+            code=result.code,
+            meta=meta
+        )
+    
+    except Exception as e:
+        logger.exception("Error improving skill")
+        return ImproveSkillResponse(
+            success=False,
+            error=f"Failed to improve skill: {str(e)}"
+        )
+
+
 # Consumer Agent endpoints
 
 @app.post("/consumer-agent/chat")
@@ -645,12 +719,19 @@ async def get_agent_reasoning(
 
 @app.post("/consumer-agent/sessions/start")
 async def start_new_agent_session(
-    user_id: str = "default",
+    request: Request,
     agent: ConsumerAgent = Depends(get_consumer_agent)
 ) -> Dict[str, Any]:
     """Start a new conversation session with the consumer agent."""
     
     try:
+        # Try to get user_id from request body, fallback to default
+        try:
+            body = await request.json()
+            user_id = body.get("user_id", "default")
+        except:
+            user_id = "default"
+            
         session_id = await agent.start_conversation(user_id)
         
         return {

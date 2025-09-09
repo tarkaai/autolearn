@@ -32,12 +32,15 @@ export default function SkillsPage() {
   const [editorCode, setEditorCode] = useState<string>("");
   const [isCodeLoading, setIsCodeLoading] = useState(false);
   const [isNewSkillDialogOpen, setIsNewSkillDialogOpen] = useState(false);
+  const [isImproveSkillDialogOpen, setIsImproveSkillDialogOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isImproving, setIsImproving] = useState(false);
   const [newSkillForm, setNewSkillForm] = useState({
     name: "",
     description: "",
     prompt: ""
   });
+  const [improvementPrompt, setImprovementPrompt] = useState("");
 
   // Get WebSocket context for real-time updates
   const webSocket = useWebSocketContext();
@@ -192,6 +195,43 @@ export default function SkillsPage() {
     }
   };
 
+  // Handle improving a skill
+  const handleImproveSkill = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!selectedSkill || !improvementPrompt.trim()) return;
+    
+    try {
+      setIsImproving(true);
+      
+      // Call the improve skill API
+      const improveResponse = await apiClient.improveSkill({
+        skill_name: selectedSkill.name,
+        current_code: skillCode,
+        improvement_prompt: improvementPrompt
+      });
+      
+      if (!improveResponse.success || !improveResponse.code) {
+        throw new Error(improveResponse.error || "Failed to improve skill");
+      }
+      
+      // Update the editor with the improved code
+      setEditorCode(improveResponse.code);
+      
+      toast.success(`Skill ${selectedSkill.name} improved successfully! Review and save the changes.`);
+      
+      // Reset form and close dialog
+      setImprovementPrompt("");
+      setIsImproveSkillDialogOpen(false);
+      
+    } catch (error) {
+      toast.error(`Failed to improve skill: ${(error as Error).message}`);
+      console.error(error);
+    } finally {
+      setIsImproving(false);
+    }
+  };
+
   // Handle deleting a skill
   const handleDeleteSkill = async () => {
     if (!selectedSkill) return;
@@ -218,11 +258,11 @@ export default function SkillsPage() {
 
   return (
     <MainLayout>
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="h-[calc(100vh-8rem)] grid grid-cols-1 md:grid-cols-4 gap-6">
         {/* Skills List */}
         <div className="md:col-span-1">
-          <Card className="h-full">
-            <CardHeader className="flex flex-row justify-between items-center">
+          <Card className="h-full flex flex-col">
+            <CardHeader className="flex flex-row justify-between items-center flex-shrink-0">
               <CardTitle>Skills</CardTitle>
               <Dialog open={isNewSkillDialogOpen} onOpenChange={setIsNewSkillDialogOpen}>
                 <DialogTrigger asChild>
@@ -269,7 +309,7 @@ export default function SkillsPage() {
                 </DialogContent>
               </Dialog>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 overflow-y-auto">
               {isLoading ? (
                 <div className="py-4 text-center text-muted-foreground">
                   Loading skills...
@@ -302,8 +342,8 @@ export default function SkillsPage() {
 
         {/* Skill Editor */}
         <div className="md:col-span-3">
-          <Card className="h-full">
-            <CardHeader className="flex flex-row justify-between items-center">
+          <Card className="h-full flex flex-col">
+            <CardHeader className="flex flex-row justify-between items-center flex-shrink-0">
               <div>
                 <CardTitle>{selectedSkill?.name || "No skill selected"}</CardTitle>
                 {selectedSkill && (
@@ -311,47 +351,91 @@ export default function SkillsPage() {
                 )}
               </div>
               {selectedSkill && (
-                <Button 
-                  variant="destructive" 
-                  size="sm" 
-                  onClick={handleDeleteSkill}
-                >
-                  Delete
-                </Button>
+                <div className="flex space-x-2">
+                  <Dialog open={isImproveSkillDialogOpen} onOpenChange={setIsImproveSkillDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                      >
+                        Improve Skill
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-2xl">
+                      <DialogHeader>
+                        <DialogTitle>Improve Skill: {selectedSkill.name}</DialogTitle>
+                      </DialogHeader>
+                      <form onSubmit={handleImproveSkill} className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="improvement-prompt">How would you like to improve this skill?</Label>
+                          <Textarea 
+                            id="improvement-prompt" 
+                            value={improvementPrompt} 
+                            onChange={(e) => setImprovementPrompt(e.target.value)}
+                            placeholder="e.g., Add error handling, support more file formats, improve performance, add validation..."
+                            rows={6}
+                            required
+                          />
+                        </div>
+                        <div className="flex justify-end space-x-2">
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            onClick={() => setIsImproveSkillDialogOpen(false)}
+                          >
+                            Cancel
+                          </Button>
+                          <Button type="submit" disabled={isImproving}>
+                            {isImproving ? "Improving..." : "Improve Skill"}
+                          </Button>
+                        </div>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+                  <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    onClick={handleDeleteSkill}
+                  >
+                    Delete
+                  </Button>
+                </div>
               )}
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 min-h-0">
               {!selectedSkill ? (
                 <div className="py-12 text-center text-muted-foreground">
                   Select a skill to view and edit
                 </div>
               ) : (
-                <Tabs defaultValue="code" className="w-full">
-                  <TabsList>
+                <Tabs defaultValue="code" className="w-full h-full flex flex-col">
+                  <TabsList className="flex-shrink-0">
                     <TabsTrigger value="code">Code</TabsTrigger>
                     <TabsTrigger value="metadata">Metadata</TabsTrigger>
                   </TabsList>
-                  <TabsContent value="code" className="h-[60vh]">
+                  <TabsContent value="code" className="h-[60vh] flex flex-col">
                     {isCodeLoading ? (
                       <div className="h-full flex items-center justify-center">
                         <p>Loading code...</p>
                       </div>
                     ) : (
                       <>
-                        <MonacoEditor
-                          height="100%"
-                          language="python"
-                          theme="vs-dark"
-                          value={editorCode}
-                          onChange={handleCodeChange}
-                          options={{
-                            minimap: { enabled: false },
-                            scrollBeyondLastLine: false,
-                            automaticLayout: true,
-                            fontSize: 14,
-                          }}
-                        />
-                        <div className="flex justify-end mt-4 space-x-2">
+                        <div className="flex-1 min-h-0 border rounded-md overflow-hidden">
+                          <MonacoEditor
+                            height="100%"
+                            language="python"
+                            theme="vs-dark"
+                            value={editorCode}
+                            onChange={handleCodeChange}
+                            options={{
+                              minimap: { enabled: false },
+                              scrollBeyondLastLine: false,
+                              automaticLayout: true,
+                              fontSize: 14,
+                            }}
+                          />
+                        </div>
+                        <div className="flex justify-end mt-4 space-x-2 flex-shrink-0">
                           <Button 
                             variant="outline" 
                             onClick={handleResetCode}
@@ -369,7 +453,7 @@ export default function SkillsPage() {
                       </>
                     )}
                   </TabsContent>
-                  <TabsContent value="metadata">
+                  <TabsContent value="metadata" className="flex-1 overflow-y-auto">
                     {selectedSkill && (
                       <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
@@ -388,8 +472,8 @@ export default function SkillsPage() {
                         </div>
                         <div className="space-y-2">
                           <Label>Inputs</Label>
-                          <div className="rounded-md border">
-                            <pre className="p-4 text-sm overflow-auto">
+                          <div className="rounded-md border max-h-64 overflow-auto">
+                            <pre className="p-4 text-sm">
                               {JSON.stringify(selectedSkill.inputs, null, 2)}
                             </pre>
                           </div>

@@ -43,9 +43,6 @@ const MainLayout: FC<MainLayoutProps> = ({ children }) => {
       <main className="flex-1 p-4 md:p-6 max-w-7xl mx-auto w-full">
         {children}
       </main>
-      <footer className="border-t border-border px-4 py-3 text-center text-sm text-muted-foreground">
-        <p>AutoLearn - Dynamic skill creation for AI agents</p>
-      </footer>
     </div>
   );
 };

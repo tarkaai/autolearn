@@ -195,7 +195,7 @@ export default function UserChat({ onSkillGenerated, onSkillUsed }: UserChatProp
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader>
+      <CardHeader className="flex-shrink-0">
         <CardTitle className="flex items-center gap-2">
           <BotIcon className="h-5 w-5" />
           AI Assistant Chat
@@ -207,9 +207,9 @@ export default function UserChat({ onSkillGenerated, onSkillUsed }: UserChatProp
         </CardTitle>
       </CardHeader>
 
-      <CardContent className="flex-1 flex flex-col gap-4 p-4">
+      <CardContent className="flex-1 flex flex-col gap-4 p-4 min-h-0">
         {/* Messages */}
-        <ScrollArea className="flex-1 pr-4">
+        <ScrollArea className="flex-1 pr-4 min-h-0">
           <div className="space-y-4">
             {messages.map((message, index) => (
               <div key={index} className="space-y-2">
@@ -302,56 +302,58 @@ export default function UserChat({ onSkillGenerated, onSkillUsed }: UserChatProp
           </div>
         </ScrollArea>
 
-        <Separator />
+        <div className="flex-shrink-0">
+          <Separator />
 
-        {/* Current suggestions */}
-        {suggestions.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground flex items-center gap-1">
-              <LightbulbIcon className="h-3 w-3" />
-              Available skills:
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {suggestions.slice(0, 5).map((suggestion, idx) => (
-                <Button
-                  key={idx}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleSuggestionClick(suggestion)}
-                  className="text-xs"
-                  title={suggestion.reason}
-                >
-                  {suggestion.skill_name}
-                  <Badge variant="secondary" className="ml-1 text-[10px]">
-                    {Math.round(suggestion.relevance_score * 100)}%
-                  </Badge>
-                </Button>
-              ))}
+          {/* Current suggestions */}
+          {suggestions.length > 0 && (
+            <div className="space-y-2 mt-4">
+              <p className="text-sm text-muted-foreground flex items-center gap-1">
+                <LightbulbIcon className="h-3 w-3" />
+                Available skills:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {suggestions.slice(0, 5).map((suggestion, idx) => (
+                  <Button
+                    key={idx}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleSuggestionClick(suggestion)}
+                    className="text-xs"
+                    title={suggestion.reason}
+                  >
+                    {suggestion.skill_name}
+                    <Badge variant="secondary" className="ml-1 text-[10px]">
+                      {Math.round(suggestion.relevance_score * 100)}%
+                    </Badge>
+                  </Button>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Input */}
-        <div className="flex gap-2">
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Ask me anything... I can use existing skills or create new ones!"
-            disabled={isLoading}
-            className="flex-1"
-          />
-          <Button 
-            onClick={sendMessage} 
-            disabled={isLoading || !input.trim()}
-            size="icon"
-          >
-            {isLoading ? (
-              <LoaderIcon className="h-4 w-4 animate-spin" />
-            ) : (
-              <SendIcon className="h-4 w-4" />
-            )}
-          </Button>
+          {/* Input */}
+          <div className="flex gap-2 mt-4">
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="Ask me anything... I can use existing skills or create new ones!"
+              disabled={isLoading}
+              className="flex-1"
+            />
+            <Button 
+              onClick={sendMessage} 
+              disabled={isLoading || !input.trim()}
+              size="icon"
+            >
+              {isLoading ? (
+                <LoaderIcon className="h-4 w-4 animate-spin" />
+              ) : (
+                <SendIcon className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

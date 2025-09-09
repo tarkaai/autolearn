@@ -1,253 +1,136 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import MainLayout from "~/components/layouts/main-layout";
-import Navigation from "~/components/navigation";
-import { useWebSocketContext } from "~/lib/websocket";
-import { apiClient, type ChatMessage, type ChatSession } from "~/lib/api-client";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "~/components/ui/card";
-import { Input } from "~/components/ui/input";
-import { Button } from "~/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
-import { toast } from "sonner";
-import { PlusIcon, SendIcon } from "lucide-react";
+import UserChat from "~/components/user-chat";
+import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { Badge } from "~/components/ui/badge";
+import { BotIcon, CodeIcon, NetworkIcon, SparklesIcon } from "lucide-react";
 
 export default function ChatPage() {
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { socket, isConnected } = useWebSocketContext();
+  const [generatedSkills, setGeneratedSkills] = useState<any[]>([]);
+  const [usedSkills, setUsedSkills] = useState<string[]>([]);
 
-  // Fetch sessions on load
-  useEffect(() => {
-    fetchSessions();
-  }, []);
+  const handleSkillGenerated = (skill: any) => {
+    setGeneratedSkills(prev => [...prev, skill]);
+  };
 
-  // When socket connects or skill is added, update the sessions and messages
-  useEffect(() => {
-    if (socket) {
-      socket.on("skill_added", (skill) => {
-        toast.success(`New skill added: ${skill.name}`);
-        // Refresh the current session to get any new messages
-        if (currentSession) {
-          fetchSession(currentSession.id);
-        }
-      });
-    }
-
-    return () => {
-      if (socket) {
-        socket.off("skill_added");
+  const handleSkillUsed = (skillName: string) => {
+    setUsedSkills(prev => {
+      if (!prev.includes(skillName)) {
+        return [...prev, skillName];
       }
-    };
-  }, [socket, currentSession]);
-
-  // Scroll to bottom whenever messages change
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  // Fetch all sessions
-  const fetchSessions = async () => {
-    try {
-      const fetchedSessions = await apiClient.listSessions();
-      setSessions(fetchedSessions);
-      
-      // If we have sessions but no current session, set the first one
-      if (fetchedSessions.length > 0 && !currentSession) {
-        const firstSession = fetchedSessions[0];
-        setCurrentSession(firstSession);
-        setMessages(firstSession.messages);
-      }
-    } catch (error) {
-      console.error("Error fetching sessions:", error);
-      toast.error("Failed to load chat sessions");
-    }
-  };
-
-  // Fetch a specific session
-  const fetchSession = async (sessionId: string) => {
-    try {
-      const session = await apiClient.getSession(sessionId);
-      setCurrentSession(session);
-      setMessages(session.messages);
-    } catch (error) {
-      console.error("Error fetching session:", error);
-      toast.error("Failed to load chat session");
-    }
-  };
-
-  // Create a new session
-  const createNewSession = async () => {
-    try {
-      setIsLoading(true);
-      const response = await apiClient.createSession({
-        name: `Chat ${new Date().toLocaleString()}`
-      });
-      
-      setSessions([...sessions, response.session]);
-      setCurrentSession(response.session);
-      setMessages(response.session.messages);
-      toast.success("New chat session created");
-    } catch (error) {
-      console.error("Error creating session:", error);
-      toast.error("Failed to create new chat session");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Handle session change
-  const handleSessionChange = (sessionId: string) => {
-    const session = sessions.find(s => s.id === sessionId);
-    if (session) {
-      setCurrentSession(session);
-      setMessages(session.messages);
-    }
-  };
-
-  // Send a message
-  const handleSendMessage = async () => {
-    if (!currentSession || !input.trim()) return;
-
-    try {
-      setIsLoading(true);
-      const response = await apiClient.addMessage(currentSession.id, {
-        role: "user",
-        content: input
-      });
-      
-      // Refresh the session to get all messages including the assistant response
-      await fetchSession(currentSession.id);
-      
-      setInput("");
-      
-      // If a skill was generated, show a notification
-      if (response.skill_generated) {
-        toast.success(`Created new skill: ${response.skill_generated.name}`);
-      }
-    } catch (error) {
-      console.error("Error sending message:", error);
-      toast.error("Failed to send message");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Handle keyboard shortcuts
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
+      return prev;
+    });
   };
 
   return (
     <MainLayout>
-      <div className="container mx-auto p-6">
-        <Navigation />
-        
-        <div className="flex flex-col h-[calc(100vh-20rem)]">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-2xl font-bold">System Demo Chat</h1>
-          <div className="flex items-center space-x-2">
-            <Select 
-              value={currentSession?.id} 
-              onValueChange={handleSessionChange}
-              disabled={isLoading}
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Select a session" />
-              </SelectTrigger>
-              <SelectContent>
-                {sessions.map((session) => (
-                  <SelectItem key={session.id} value={session.id}>
-                    {session.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button 
-              size="icon"
-              variant="outline"
-              onClick={createNewSession}
-              disabled={isLoading}
-              title="New chat session"
-            >
-              <PlusIcon className="h-4 w-4" />
-            </Button>
-          </div>
+      <div className="container mx-auto p-6 h-[calc(100vh-8rem)] flex flex-col">
+        <div className="mb-6 flex-shrink-0">
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            <SparklesIcon className="h-8 w-8 text-primary" />
+            AutoLearn Chat
+          </h1>
+          <p className="text-muted-foreground mt-2">
+            Chat with an AI agent that can use existing skills and create new ones on demand
+          </p>
         </div>
 
-        <Card className="flex-1 flex flex-col">
-          <CardHeader className="py-3">
-            <CardTitle className="text-xl">
-              {currentSession?.name || "Select a session"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex-1 overflow-y-auto p-4">
-            {messages.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-muted-foreground">
-                {currentSession ? "No messages yet" : "Select or create a chat session"}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex ${
-                      msg.role === "user" ? "justify-end" : "justify-start"
-                    }`}
-                  >
-                    <div
-                      className={`max-w-[80%] rounded-lg px-4 py-2 ${
-                        msg.role === "user"
-                          ? "bg-primary text-primary-foreground"
-                          : msg.role === "system"
-                          ? "bg-muted text-muted-foreground"
-                          : "bg-secondary text-secondary-foreground"
-                      }`}
-                    >
-                      <div className="whitespace-pre-wrap">{msg.content}</div>
-                      <div className="text-xs opacity-70 mt-1">
-                        {new Date(msg.timestamp).toLocaleTimeString()}
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-0">
+          {/* Main Chat Interface */}
+          <div className="lg:col-span-2 min-h-0">
+            <UserChat 
+              onSkillGenerated={handleSkillGenerated}
+              onSkillUsed={handleSkillUsed}
+            />
+          </div>
+
+          {/* Sidebar with Skills Info */}
+          <div className="space-y-6 overflow-y-auto">
+            {/* Generated Skills */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <CodeIcon className="h-5 w-5" />
+                  Generated Skills
+                  <Badge variant="secondary">{generatedSkills.length}</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {generatedSkills.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No skills generated yet. Ask the AI to help you with a task it can't do!
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {generatedSkills.map((skill, index) => (
+                      <div key={index} className="p-2 border rounded-lg">
+                        <div className="font-medium text-sm">{skill.name || `Skill ${index + 1}`}</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {skill.description || "No description"}
+                        </div>
                       </div>
-                    </div>
+                    ))}
                   </div>
-                ))}
-                <div ref={messagesEndRef} />
-              </div>
-            )}
-          </CardContent>
-          <CardFooter className="p-4 pt-2">
-            <div className="flex w-full items-center space-x-2">
-              <Input
-                placeholder="Type a message..."
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                disabled={!currentSession || isLoading}
-                className="flex-1"
-              />
-              <Button
-                size="icon"
-                onClick={handleSendMessage}
-                disabled={!currentSession || !input.trim() || isLoading}
-              >
-                <SendIcon className="h-4 w-4" />
-              </Button>
-            </div>
-          </CardFooter>
-        </Card>
-        
-          {!isConnected && (
-            <div className="mt-2 text-sm text-orange-500 dark:text-orange-400">
-              WebSocket disconnected. Some features may be unavailable.
-            </div>
-          )}
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Used Skills */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <NetworkIcon className="h-5 w-5" />
+                  Used Skills
+                  <Badge variant="secondary">{usedSkills.length}</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {usedSkills.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No skills used yet. The AI will automatically use relevant skills for your requests.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {usedSkills.map((skillName, index) => (
+                      <Badge key={index} variant="outline">
+                        {skillName}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Status/Help */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <BotIcon className="h-5 w-5" />
+                  How it Works
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm space-y-2">
+                <div className="flex items-start gap-2">
+                  <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 flex-shrink-0" />
+                  <p>Ask the AI assistant to help you with any task</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-500 mt-1.5 flex-shrink-0" />
+                  <p>It will use existing skills when possible</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <div className="w-2 h-2 rounded-full bg-purple-500 mt-1.5 flex-shrink-0" />
+                  <p>For new tasks, it will generate skills automatically</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <div className="w-2 h-2 rounded-full bg-orange-500 mt-1.5 flex-shrink-0" />
+                  <p>Generated skills become available for future use</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     </MainLayout>

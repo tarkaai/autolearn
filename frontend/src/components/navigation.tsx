@@ -4,11 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Card, CardContent } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
-import { Badge } from "~/components/ui/badge";
 import { 
-  HomeIcon, 
   SparklesIcon, 
-  TerminalIcon, 
   CodeIcon, 
   NetworkIcon,
   UserIcon 
@@ -20,16 +17,9 @@ export default function Navigation() {
   const navItems = [
     {
       href: "/",
-      label: "System Demo",
-      icon: TerminalIcon,
-      description: "Original milestone 3 demo interface"
-    },
-    {
-      href: "/user-mode",
-      label: "User Mode",
+      label: "Chat",
       icon: UserIcon,
-      description: "AI assistant that creates skills on demand",
-      badge: "New"
+      description: "AI assistant that creates skills on demand"
     },
     {
       href: "/skills",
@@ -67,11 +57,6 @@ export default function Navigation() {
                   <div className="flex items-center gap-2 w-full">
                     <Icon className="h-5 w-5" />
                     <span className="font-medium">{item.label}</span>
-                    {item.badge && (
-                      <Badge variant="secondary" className="text-xs">
-                        {item.badge}
-                      </Badge>
-                    )}
                   </div>
                   <p className="text-xs text-left opacity-80">
                     {item.description}

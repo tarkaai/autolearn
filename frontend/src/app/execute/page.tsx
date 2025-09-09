@@ -55,16 +55,17 @@ export default function ExecutePage() {
     if (webSocket.socket) {
       // When a skill is executed
       webSocket.socket.on("skill_executed", (executionData: SkillExecutedEvent) => {
-        // Add the execution result to our history
+        // Replace the execution result (show only latest)
         const result: ExecutionResult = {
           id: new Date().toISOString(),
           skill: executionData.skill,
           inputs: executionData.args,
           output: executionData.result,
+          error: (executionData as any).error, // Future-proof for error handling
           timestamp: new Date(executionData.timestamp)
         };
         
-        setResults(prev => [result, ...prev]);
+        setResults([result]); // Replace instead of concatenate
       });
       
       // When a new skill is added
@@ -144,29 +145,32 @@ export default function ExecutePage() {
         args: formattedInputs
       });
       
-      // Add result to history
-      const result: ExecutionResult = {
-        id: new Date().toISOString(),
-        skill: selectedSkill.name,
-        inputs: formattedInputs,
-        output: response.result,
-        error: response.error,
-        timestamp: new Date()
-      };
-      
-      setResults(prev => [result, ...prev]);
+      // Don't add result to history here - WebSocket listener will handle it
+      // This prevents duplicate results from appearing
       
       if (response.success) {
         toast.success(`Skill ${selectedSkill.name} executed successfully`);
       } else {
         toast.error(`Skill execution failed: ${response.error}`);
+        
+        // Only add result manually if there was an error and WebSocket might not emit
+        const errorResult: ExecutionResult = {
+          id: new Date().toISOString(),
+          skill: selectedSkill.name,
+          inputs: formattedInputs,
+          output: null,
+          error: response.error,
+          timestamp: new Date()
+        };
+        
+        setResults([errorResult]); // Replace instead of concatenate
       }
     } catch (error) {
       toast.error(`Failed to execute skill: ${(error as Error).message}`);
       console.error(error);
       
-      // Add error result
-      const result: ExecutionResult = {
+      // Add error result for network/API errors (WebSocket won't emit these)
+      const errorResult: ExecutionResult = {
         id: new Date().toISOString(),
         skill: selectedSkill.name,
         inputs: formattedInputs,
@@ -175,7 +179,7 @@ export default function ExecutePage() {
         timestamp: new Date()
       };
       
-      setResults(prev => [result, ...prev]);
+      setResults([errorResult]); // Replace instead of concatenate
     } finally {
       setIsExecuting(false);
     }
@@ -262,13 +266,13 @@ export default function ExecutePage() {
         {/* Results View */}
         <Card>
           <CardHeader>
-            <CardTitle>Execution Results</CardTitle>
+            <CardTitle>Latest Execution Result</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4 max-h-[calc(100vh-16rem)] overflow-y-auto">
               {results.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
-                  No execution results yet. Execute a skill to see results here.
+                  No execution result yet. Execute a skill to see the result here.
                 </div>
               ) : (
                 results.map(result => (
