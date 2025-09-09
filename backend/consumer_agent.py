@@ -270,17 +270,62 @@ Respond in a natural, conversational way while being clear about what actions yo
             # Parse response to determine actions
             # For now, simple keyword-based detection
             needs_skill_generation = any(keyword in agent_response.lower() for keyword in [
-                "create a skill", "new skill", "generate a skill", "don't have a skill"
+                "create a skill", "new skill", "generate a skill", "don't have a skill",
+                "creation of a new skill", "request the creation", "none of the existing skills",
+                "creating this new skill", "i'll request the creation", "go ahead and request"
             ])
             
             # Suggest relevant existing tools
             suggestions = await self._get_skill_suggestions(user_message, available_tools)
             
+            actions = []
+            
+            # If skill generation is needed, attempt to generate it automatically
+            if needs_skill_generation:
+                logger.info(f"Skill generation needed for message: {user_message}")
+                try:
+                    # Extract skill description from user message and agent response
+                    skill_description = self._extract_skill_description(user_message, agent_response)
+                    logger.info(f"Extracted skill description: {skill_description}")
+                    
+                    # Generate the skill
+                    generation_result = await self.request_skill_generation(
+                        context.session_id, 
+                        skill_description
+                    )
+                    
+                    logger.info(f"Skill generation result: {generation_result}")
+                    
+                    if generation_result["success"]:
+                        actions.append({
+                            "type": "skill_generated",
+                            "skill": generation_result["skill"],
+                            "skill_name": generation_result["skill"].get("name", "unnamed"),
+                            "description": skill_description
+                        })
+                        
+                        # Update agent response to include success message
+                        agent_response = f"{agent_response}\n\n🎉 Great news! I've successfully created a new skill called '{generation_result['skill'].get('name', 'unnamed')}' that can help you with this task!"
+                        
+                        # Mark skill as used since we generated it for this request
+                        skill_name = generation_result["skill"].get("name", "unnamed")
+                        context.skills_used.append(skill_name)
+                        actions.append({
+                            "type": "skill_used",
+                            "skill_name": skill_name
+                        })
+                        
+                except Exception as e:
+                    logger.error(f"Auto skill generation failed: {e}")
+                    # Keep the original response indicating we'll create the skill
+            else:
+                logger.info(f"No skill generation needed. Response: {agent_response[:100]}...")
+            
             return {
                 "message": agent_response,
-                "actions": [],  # Will be populated with tool calls
+                "actions": actions,
                 "suggestions": suggestions,
-                "needs_skill_generation": needs_skill_generation,
+                "needs_skill_generation": needs_skill_generation and len(actions) == 0,  # False if we successfully generated
                 "session_id": context.session_id
             }
             
@@ -293,6 +338,29 @@ Respond in a natural, conversational way while being clear about what actions yo
                 "needs_skill_generation": False
             }
             
+    def _extract_skill_description(self, user_message: str, agent_response: str) -> str:
+        """Extract a skill description from user message and agent response."""
+        # Simple extraction - look for common patterns
+        user_lower = user_message.lower()
+        
+        # Look for "create a skill to..." or "help me..." patterns
+        if "create a skill to" in user_lower:
+            # Extract everything after "create a skill to"
+            start_idx = user_lower.find("create a skill to") + len("create a skill to")
+            description = user_message[start_idx:].strip()
+            if description:
+                return description
+        
+        if "help me" in user_lower:
+            # Extract everything after "help me"
+            start_idx = user_lower.find("help me") + len("help me")
+            description = user_message[start_idx:].strip()
+            if description:
+                return f"Help with: {description}"
+        
+        # Fallback: use the entire user message
+        return user_message
+    
     async def _get_skill_suggestions(
         self, 
         user_message: str, 
@@ -337,14 +405,43 @@ Respond in a natural, conversational way while being clear about what actions yo
     ) -> Dict[str, Any]:
         """Request generation of a new skill from AutoLearn server."""
         
-        async with MCPClient(self.mcp_server_url) as mcp:
-            try:
-                # Use the generate_skill tool
-                result = await mcp.call_tool("generate_skill", {
-                    "description": skill_description,
-                    "name": skill_name
-                })
+        try:
+            # Use the REST API directly for skill generation
+            from .openai_client import get_openai_client
+            from .schemas import GenerateSkillRequest
+            
+            # Get the configured OpenAI client and generation request
+            openai_client = get_openai_client()
+            generation_req = GenerateSkillRequest(
+                description=skill_description,
+                name=skill_name
+            )
+            
+            # Generate the skill code
+            result = openai_client.generate_skill_code(generation_req)
+            
+            if result and result.code and result.meta:
+                # Register the skill with the engine
+                from .skill_engine import get_engine
+                from .schemas import SkillMeta
+                engine = get_engine()
                 
+                # Convert meta dict to SkillMeta object (following the pattern from app.py)
+                meta_dict = result.meta
+                if not isinstance(meta_dict, dict):
+                    raise ValueError("Generated metadata is not a dictionary")
+                    
+                skill_meta = SkillMeta(
+                    name=meta_dict.get("name", skill_name or "unnamed_skill"),
+                    description=meta_dict.get("description", skill_description),
+                    version=meta_dict.get("version", "0.1.0"),
+                    inputs=meta_dict.get("inputs", {})
+                )
+                
+                # Register the generated skill
+                engine.register_from_code(result.code, skill_meta)
+                
+                # Registration succeeded if we get here without exception
                 # Update conversation context
                 if session_id in self.conversations:
                     context = self.conversations[session_id]
@@ -352,17 +449,24 @@ Respond in a natural, conversational way while being clear about what actions yo
                     
                 return {
                     "success": True,
-                    "skill": result,
-                    "message": f"Successfully generated skill: {result.get('name', 'unnamed')}"
+                    "skill": {
+                        "name": skill_meta.name,
+                        "description": skill_meta.description,
+                        "version": skill_meta.version,
+                        "code": result.code
+                    },
+                    "message": f"Successfully generated skill: {skill_meta.name}"
                 }
+            else:
+                raise Exception("Skill generation returned invalid result")
                 
-            except Exception as e:
-                logger.error(f"Skill generation failed: {e}")
-                return {
-                    "success": False,
-                    "error": str(e),
-                    "message": "I wasn't able to generate that skill right now. Please try again."
-                }
+        except Exception as e:
+            logger.error(f"Skill generation failed: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "I wasn't able to generate that skill right now. Please try again."
+            }
                 
     def get_conversation_history(self, session_id: str) -> Optional[ConversationContext]:
         """Get conversation history for a session."""
