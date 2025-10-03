@@ -303,4 +303,4 @@ This ensures that:
 
 ## License
 
-[TBD]
+[MIT License](LICENSE.md) 2025 Tarka Ventures, Inc.
