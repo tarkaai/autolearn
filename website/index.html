@@ -47,20 +47,14 @@
 </head>
 <body class="bg-gray-900 text-white font-sans overflow-x-hidden">
     <!-- Background gradient -->
-    <div class="fixed inset-0 bg-gradient-to-br from-purple-900/20 via-blue-900/20 to-cyan-900/20 animate-gradient bg-[length:400%_400%]"></div>
+    <div class="fixed inset-0 bg-gradient-to-br from-slate-900/30 via-gray-900/20 to-zinc-900/30 animate-gradient bg-[length:400%_400%]"></div>
     
-    <!-- Animated particles -->
-    <div class="fixed inset-0 overflow-hidden pointer-events-none">
-        <div class="absolute top-1/4 left-1/4 w-2 h-2 bg-blue-400 rounded-full animate-float opacity-60"></div>
-        <div class="absolute top-3/4 right-1/4 w-1 h-1 bg-purple-400 rounded-full animate-float opacity-40" style="animation-delay: 2s;"></div>
-        <div class="absolute top-1/2 left-3/4 w-1.5 h-1.5 bg-cyan-400 rounded-full animate-float opacity-50" style="animation-delay: 4s;"></div>
-    </div>
 
     <!-- Navigation -->
     <nav class="relative z-50 px-6 py-4 border-b border-gray-800/50 backdrop-blur-xl">
         <div class="max-w-7xl mx-auto flex items-center justify-between">
             <div class="flex items-center space-x-2">
-                <div class="w-8 h-8 bg-gradient-to-br from-blue-400 to-purple-500 rounded-lg flex items-center justify-center">
+                <div class="w-8 h-8 bg-gradient-to-br from-emerald-500 to-slate-600 rounded-lg flex items-center justify-center">
                     <span class="text-white font-bold text-sm">AL</span>
                 </div>
                 <span class="text-xl font-bold">AutoLearn</span>
@@ -69,7 +63,7 @@
                 <a href="#features" class="text-gray-300 hover:text-white transition-colors">Features</a>
                 <a href="#enterprise" class="text-gray-300 hover:text-white transition-colors">Enterprise</a>
                 <a href="#docs" class="text-gray-300 hover:text-white transition-colors">Docs</a>
-                <button class="bg-gradient-to-r from-blue-500 to-purple-600 px-4 py-2 rounded-lg font-medium hover:from-blue-600 hover:to-purple-700 transition-all transform hover:scale-105">
+                <button class="bg-emerald-600 px-4 py-2 rounded-lg font-medium hover:bg-emerald-700 transition-all duration-200">
                     Get Started
                 </button>
             </div>
@@ -80,22 +74,22 @@
     <section class="relative z-10 pt-20 pb-32 px-6">
         <div class="max-w-7xl mx-auto text-center">
             <div class="animate-slide-up">
-                <h1 class="text-5xl md:text-7xl font-bold mb-6 bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent leading-tight">
+                <h1 class="text-5xl md:text-7xl font-extrabold mb-8 bg-gradient-to-r from-emerald-400 via-slate-300 to-blue-400 bg-clip-text text-transparent leading-tight tracking-tight">
                     Crystallize AI Reasoning
                     <br>Into Deterministic Code
                 </h1>
-                <p class="text-xl md:text-2xl text-gray-300 mb-8 max-w-4xl mx-auto leading-relaxed">
+                <p class="text-xl md:text-2xl text-gray-300 mb-10 max-w-4xl mx-auto leading-relaxed font-medium">
                     AutoLearn is the MCP server that automatically converts your AI agent's reasoning steps into 
-                    <span class="text-blue-400 font-semibold">reliable, cost-effective code</span> that runs deterministically every time.
+                    <span class="text-emerald-400 font-semibold">reliable, cost-effective code</span> that runs deterministically every time.
                 </p>
             </div>
             
             <div class="animate-fade-in" style="animation-delay: 0.3s;">
                 <div class="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-                    <button class="bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-4 rounded-lg font-semibold text-lg hover:from-blue-600 hover:to-purple-700 transition-all transform hover:scale-105 shadow-2xl">
+                    <button class="bg-emerald-600 px-8 py-4 rounded-xl font-semibold text-lg hover:bg-emerald-700 transition-all duration-200 shadow-lg hover:shadow-emerald-500/25">
                         Start Building
                     </button>
-                    <button class="border border-gray-600 px-8 py-4 rounded-lg font-semibold text-lg hover:bg-gray-800 transition-all">
+                    <button class="border border-gray-600 px-8 py-4 rounded-xl font-semibold text-lg hover:bg-gray-800 hover:border-gray-500 transition-all duration-200">
                         View Documentation
                     </button>
                 </div>
@@ -103,7 +97,7 @@
 
             <!-- Code Demo -->
             <div class="animate-fade-in" style="animation-delay: 0.6s;">
-                <div class="max-w-4xl mx-auto bg-gray-800/50 border border-gray-700 rounded-xl p-6 backdrop-blur-xl">
+                <div class="max-w-4xl mx-auto bg-gray-800/50 border border-gray-700/50 rounded-2xl p-6 backdrop-blur-xl shadow-2xl">
                     <div class="flex items-center mb-4">
                         <div class="flex space-x-2">
                             <div class="w-3 h-3 bg-red-500 rounded-full"></div>
@@ -112,7 +106,7 @@
                         </div>
                         <span class="text-gray-400 text-sm ml-4 font-mono">autolearn-server.py</span>
                     </div>
-                    <pre class="text-left text-sm font-mono text-gray-300 overflow-x-auto"><code><span class="text-purple-400">@autolearn.crystallize</span>
+                    <pre class="text-left text-sm font-mono text-gray-300 overflow-x-auto"><code><span class="text-emerald-400">@autolearn.crystallize</span>
 <span class="text-blue-400">def</span> <span class="text-yellow-400">analyze_user_intent</span>(<span class="text-gray-300">message</span>):
     <span class="text-gray-500"># AI reasoning automatically converted to code</span>
     <span class="text-blue-400">if</span> <span class="text-green-400">"schedule"</span> <span class="text-blue-400">in</span> message.lower():
@@ -130,7 +124,7 @@
         <div class="max-w-7xl mx-auto">
             <div class="text-center mb-16">
                 <h2 class="text-4xl md:text-5xl font-bold mb-6">
-                    <span class="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">How AutoLearn Works</span>
+                    <span class="bg-gradient-to-r from-emerald-400 to-slate-300 bg-clip-text text-transparent">How AutoLearn Works</span>
                 </h2>
                 <p class="text-xl text-gray-300 max-w-4xl mx-auto leading-relaxed">
                     AutoLearn automatically captures your AI agent's reasoning patterns and crystallizes them into deterministic, 
@@ -142,8 +136,8 @@
             <div class="max-w-6xl mx-auto">
                 <!-- Initial Request Flow -->
                 <div class="mb-20">
-                    <h3 class="text-2xl font-bold text-center mb-8 text-blue-400">🔄 First Time: Learning Mode</h3>
-                    <div class="bg-gradient-to-r from-blue-900/20 to-purple-900/20 border border-blue-500/30 rounded-xl p-8">
+                    <h3 class="text-2xl font-bold text-center mb-8 text-emerald-400">First Time: Learning Mode</h3>
+                    <div class="bg-gradient-to-r from-slate-900/20 to-gray-900/20 border border-slate-600/30 rounded-xl p-8">
                         <div class="flex flex-col lg:flex-row items-center space-y-8 lg:space-y-0 lg:space-x-6">
                             <!-- Consumer Agent -->
                             <div class="flex-1">
@@ -153,29 +147,29 @@
                                     <div class="text-sm text-gray-300">User: "Analyze sales data for Q3"</div>
                                 </div>
                             </div>
-                            <div class="text-blue-400 text-2xl">🔍</div>
+                            <div class="text-emerald-400 text-2xl font-bold">→</div>
                             
                             <!-- AutoLearn Check -->
                             <div class="flex-1">
                                 <div class="bg-gray-800/50 border border-yellow-500 rounded-lg p-4 text-center">
                                     <div class="text-sm text-yellow-400 mb-2">AutoLearn MCP Server</div>
                                     <div class="text-lg font-semibold mb-2">Skill Check</div>
-                                    <div class="text-sm text-gray-300 mb-2">❌ No skill found</div>
+                                    <div class="text-sm text-gray-300 mb-2">No skill found</div>
                                     <div class="text-xs text-yellow-400">"analyze_sales_data" doesn't exist</div>
                                 </div>
                             </div>
-                            <div class="text-yellow-400 text-2xl">➡️</div>
+                            <div class="text-yellow-400 text-2xl font-bold">→</div>
                             
                             <!-- AI Reasoning -->
                             <div class="flex-1">
-                                <div class="bg-gray-800/50 border border-purple-500 rounded-lg p-4 text-center">
-                                    <div class="text-sm text-purple-400 mb-2">AI Reasoning Process</div>
+                                <div class="bg-gray-800/50 border border-slate-500 rounded-lg p-4 text-center">
+                                    <div class="text-sm text-slate-400 mb-2">AI Reasoning Process</div>
                                     <div class="text-xs text-gray-300 space-y-1">
-                                        <div>1. Parse request 🧠</div>
-                                        <div>2. Load Q3 data 🧠</div>
-                                        <div>3. Calculate metrics 🧠</div>
-                                        <div>4. Generate insights 🧠</div>
-                                        <div>5. Format output 🧠</div>
+                                        <div>1. Parse request</div>
+                                        <div>2. Load Q3 data</div>
+                                        <div>3. Calculate metrics</div>
+                                        <div>4. Generate insights</div>
+                                        <div>5. Format output</div>
                                     </div>
                                     <div class="mt-2 text-xs text-red-400">59% success rate</div>
                                 </div>
@@ -184,15 +178,15 @@
                         
                         <!-- Learning Arrow -->
                         <div class="flex items-center justify-center my-6">
-                            <div class="text-green-400 text-2xl">📝 AutoLearn Records Trace</div>
+                            <div class="text-emerald-400 text-xl font-semibold">AutoLearn Records Trace</div>
                         </div>
                         
                         <!-- Skill Creation -->
                         <div class="text-center">
-                            <div class="bg-green-900/30 border border-green-500 rounded-lg p-4 inline-block">
-                                <div class="text-sm text-green-400 mb-2">AutoLearn Creates Skill</div>
+                            <div class="bg-emerald-900/30 border border-emerald-500 rounded-lg p-4 inline-block">
+                                <div class="text-sm text-emerald-400 mb-2">AutoLearn Creates Skill</div>
                                 <div class="text-lg font-semibold mb-2">"analyze_sales_data" skill</div>
-                                <div class="text-xs text-gray-300">✅ Crystallized into deterministic code</div>
+                                <div class="text-xs text-gray-300">Crystallized into deterministic code</div>
                             </div>
                         </div>
                     </div>
@@ -200,8 +194,8 @@
 
                 <!-- Subsequent Request Flow -->
                 <div class="mb-20">
-                    <h3 class="text-2xl font-bold text-center mb-8 text-green-400">⚡ Subsequent Times: Skill Mode</h3>
-                    <div class="bg-gradient-to-r from-green-900/20 to-blue-900/20 border border-green-500/30 rounded-xl p-8">
+                    <h3 class="text-2xl font-bold text-center mb-8 text-emerald-400">Subsequent Times: Skill Mode</h3>
+                    <div class="bg-gradient-to-r from-emerald-900/20 to-slate-900/20 border border-emerald-500/30 rounded-xl p-8">
                         <div class="flex flex-col lg:flex-row items-center space-y-8 lg:space-y-0 lg:space-x-6">
                             <!-- Consumer Agent -->
                             <div class="flex-1">
@@ -211,31 +205,31 @@
                                     <div class="text-sm text-gray-300">User: "Analyze sales data for Q4"</div>
                                 </div>
                             </div>
-                            <div class="text-green-400 text-2xl">🔍</div>
+                            <div class="text-emerald-400 text-2xl font-bold">→</div>
                             
                             <!-- AutoLearn Check -->
                             <div class="flex-1">
-                                <div class="bg-gray-800/50 border border-green-500 rounded-lg p-4 text-center">
-                                    <div class="text-sm text-green-400 mb-2">AutoLearn MCP Server</div>
+                                <div class="bg-gray-800/50 border border-emerald-500 rounded-lg p-4 text-center">
+                                    <div class="text-sm text-emerald-400 mb-2">AutoLearn MCP Server</div>
                                     <div class="text-lg font-semibold mb-2">Skill Check</div>
-                                    <div class="text-sm text-gray-300 mb-2">✅ Skill found!</div>
-                                    <div class="text-xs text-green-400">"analyze_sales_data" exists</div>
+                                    <div class="text-sm text-gray-300 mb-2">Skill found!</div>
+                                    <div class="text-xs text-emerald-400">"analyze_sales_data" exists</div>
                                 </div>
                             </div>
-                            <div class="text-green-400 text-2xl">⚡</div>
+                            <div class="text-emerald-400 text-2xl font-bold">→</div>
                             
                             <!-- Skill Execution -->
                             <div class="flex-1">
-                                <div class="bg-gray-800/50 border border-green-500 rounded-lg p-4 text-center">
-                                    <div class="text-sm text-green-400 mb-2">Skill Execution</div>
+                                <div class="bg-gray-800/50 border border-emerald-500 rounded-lg p-4 text-center">
+                                    <div class="text-sm text-emerald-400 mb-2">Skill Execution</div>
                                     <div class="text-xs text-gray-300 space-y-1">
-                                        <div>1. Parse request ⚡</div>
-                                        <div>2. Load Q4 data ⚡</div>
-                                        <div>3. Calculate metrics ⚡</div>
-                                        <div>4. Generate insights ⚡</div>
-                                        <div>5. Format output ⚡</div>
+                                        <div>1. Parse request</div>
+                                        <div>2. Load Q4 data</div>
+                                        <div>3. Calculate metrics</div>
+                                        <div>4. Generate insights</div>
+                                        <div>5. Format output</div>
                                     </div>
-                                    <div class="mt-2 text-xs text-green-400">95% success rate</div>
+                                    <div class="mt-2 text-xs text-emerald-400">95% success rate</div>
                                     <div class="text-xs text-gray-300">100x faster execution</div>
                                 </div>
                             </div>
@@ -245,7 +239,7 @@
 
                 <!-- Skill Improvement Flow -->
                 <div class="mb-12">
-                    <h3 class="text-2xl font-bold text-center mb-8 text-orange-400">🔧 Continuous Improvement</h3>
+                    <h3 class="text-2xl font-bold text-center mb-8 text-orange-400">Continuous Improvement</h3>
                     <div class="bg-gradient-to-r from-orange-900/20 to-red-900/20 border border-orange-500/30 rounded-xl p-8">
                         <div class="text-center mb-6">
                             <div class="text-gray-300">When a skill fails (5% of the time), the agent falls back to AI reasoning...</div>
@@ -259,7 +253,7 @@
                                     <div class="text-xs text-red-400">Edge case: Missing Q4 data</div>
                                 </div>
                             </div>
-                            <div class="text-orange-400 text-2xl">🔄</div>
+                            <div class="text-orange-400 text-2xl font-bold">→</div>
                             
                             <!-- AI Fallback -->
                             <div class="flex-1">
@@ -269,7 +263,7 @@
                                     <div class="text-xs text-gray-300">Handle missing data case</div>
                                 </div>
                             </div>
-                            <div class="text-orange-400 text-2xl">📈</div>
+                            <div class="text-orange-400 text-2xl font-bold">→</div>
                             
                             <!-- Skill Update -->
                             <div class="flex-1">
@@ -286,19 +280,31 @@
 
                 <!-- Key Benefits -->
                 <div class="grid md:grid-cols-3 gap-6">
-                    <div class="bg-blue-900/30 border border-blue-500/30 rounded-lg p-6 text-center">
-                        <div class="text-3xl mb-3">🎯</div>
-                        <h4 class="text-lg font-semibold mb-2 text-blue-400">Agent-Specific</h4>
+                    <div class="bg-slate-900/30 border border-slate-600/30 rounded-lg p-6 text-center">
+                        <div class="w-12 h-12 bg-slate-600 rounded-xl flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <h4 class="text-lg font-semibold mb-2 text-slate-300">Agent-Specific</h4>
                         <p class="text-sm text-gray-300">Each agent builds its own unique skill library based on its specific usage patterns</p>
                     </div>
-                    <div class="bg-green-900/30 border border-green-500/30 rounded-lg p-6 text-center">
-                        <div class="text-3xl mb-3">🤖</div>
-                        <h4 class="text-lg font-semibold mb-2 text-green-400">Fully Automatic</h4>
+                    <div class="bg-emerald-900/30 border border-emerald-500/30 rounded-lg p-6 text-center">
+                        <div class="w-12 h-12 bg-emerald-600 rounded-xl flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                            </svg>
+                        </div>
+                        <h4 class="text-lg font-semibold mb-2 text-emerald-400">Fully Automatic</h4>
                         <p class="text-sm text-gray-300">No manual skill creation or training required. AutoLearn watches and learns from AI reasoning</p>
                     </div>
-                    <div class="bg-purple-900/30 border border-purple-500/30 rounded-lg p-6 text-center">
-                        <div class="text-3xl mb-3">🔄</div>
-                        <h4 class="text-lg font-semibold mb-2 text-purple-400">Self-Improving</h4>
+                    <div class="bg-blue-900/30 border border-blue-500/30 rounded-lg p-6 text-center">
+                        <div class="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                        </div>
+                        <h4 class="text-lg font-semibold mb-2 text-blue-400">Self-Improving</h4>
                         <p class="text-sm text-gray-300">Skills continuously improve as the agent encounters new edge cases and scenarios</p>
                     </div>
                 </div>
@@ -495,7 +501,7 @@
                             <div class="text-sm text-gray-400">$0.05 vs $0.25 per workflow</div>
                         </div>
                         <div>
-                            <div class="text-4xl font-bold text-purple-400 mb-2">100x</div>
+                            <div class="text-4xl font-bold text-blue-400 mb-2">100x</div>
                             <div class="text-gray-300">Faster Execution</div>
                             <div class="text-sm text-gray-400">Deterministic code vs AI inference</div>
                         </div>
@@ -509,8 +515,8 @@
     <section class="relative z-10 py-20 px-6">
         <div class="max-w-7xl mx-auto">
             <div class="grid md:grid-cols-3 gap-8">
-                <div class="bg-gray-800/30 border border-gray-700 rounded-xl p-8 backdrop-blur-xl hover:bg-gray-800/50 transition-all transform hover:scale-105">
-                    <div class="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-lg flex items-center justify-center mb-6">
+                <div class="bg-gray-800/30 border border-gray-700/50 rounded-2xl p-8 backdrop-blur-xl hover:bg-gray-800/50 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+                    <div class="w-12 h-12 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-xl flex items-center justify-center mb-6">
                         <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                         </svg>
@@ -519,8 +525,8 @@
                     <p class="text-gray-300">Convert inconsistent AI reasoning into deterministic code that works the same way every time.</p>
                 </div>
 
-                <div class="bg-gray-800/30 border border-gray-700 rounded-xl p-8 backdrop-blur-xl hover:bg-gray-800/50 transition-all transform hover:scale-105">
-                    <div class="w-12 h-12 bg-gradient-to-br from-green-400 to-green-600 rounded-lg flex items-center justify-center mb-6">
+                <div class="bg-gray-800/30 border border-gray-700/50 rounded-2xl p-8 backdrop-blur-xl hover:bg-gray-800/50 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+                    <div class="w-12 h-12 bg-gradient-to-br from-slate-500 to-slate-700 rounded-xl flex items-center justify-center mb-6">
                         <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
                         </svg>
@@ -529,8 +535,8 @@
                     <p class="text-gray-300">Stop paying for repeated reasoning. Run crystallized code instead of expensive AI inference.</p>
                 </div>
 
-                <div class="bg-gray-800/30 border border-gray-700 rounded-xl p-8 backdrop-blur-xl hover:bg-gray-800/50 transition-all transform hover:scale-105">
-                    <div class="w-12 h-12 bg-gradient-to-br from-purple-400 to-purple-600 rounded-lg flex items-center justify-center mb-6">
+                <div class="bg-gray-800/30 border border-gray-700/50 rounded-2xl p-8 backdrop-blur-xl hover:bg-gray-800/50 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+                    <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center mb-6">
                         <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
                         </svg>
@@ -546,7 +552,7 @@
     <section id="features" class="relative z-10 py-20 px-6 bg-gray-800/20">
         <div class="max-w-7xl mx-auto">
             <div class="text-center mb-16">
-                <h2 class="text-4xl md:text-5xl font-bold mb-6 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                <h2 class="text-4xl md:text-5xl font-bold mb-6 bg-gradient-to-r from-emerald-400 to-slate-300 bg-clip-text text-transparent">
                     Beyond Tool Calling
                 </h2>
                 <p class="text-xl text-gray-300 max-w-3xl mx-auto">
@@ -559,7 +565,7 @@
                     <h3 class="text-2xl font-bold mb-6">Reasoning → Code Crystallization</h3>
                     <div class="space-y-4">
                         <div class="flex items-start space-x-4">
-                            <div class="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center mt-1">
+                            <div class="w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center mt-1">
                                 <span class="text-xs font-bold">1</span>
                             </div>
                             <div>
@@ -568,7 +574,7 @@
                             </div>
                         </div>
                         <div class="flex items-start space-x-4">
-                            <div class="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center mt-1">
+                            <div class="w-6 h-6 bg-slate-500 rounded-full flex items-center justify-center mt-1">
                                 <span class="text-xs font-bold">2</span>
                             </div>
                             <div>
@@ -577,7 +583,7 @@
                             </div>
                         </div>
                         <div class="flex items-start space-x-4">
-                            <div class="w-6 h-6 bg-cyan-500 rounded-full flex items-center justify-center mt-1">
+                            <div class="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center mt-1">
                                 <span class="text-xs font-bold">3</span>
                             </div>
                             <div>
@@ -593,11 +599,11 @@
                         <span class="text-gray-400 text-sm font-mono">crystallization-progress.log</span>
                     </div>
                     <div class="space-y-2 font-mono text-sm">
-                        <div class="text-green-400">✓ Pattern detected: email scheduling logic</div>
-                        <div class="text-yellow-400">⚡ Crystallizing reasoning steps...</div>
-                        <div class="text-blue-400">📝 Generated function: schedule_email_task()</div>
-                        <div class="text-purple-400">🚀 Deployed to agent skill library</div>
-                        <div class="text-gray-400">💡 Future requests will use deterministic code</div>
+                        <div class="text-green-400">Pattern detected: email scheduling logic</div>
+                        <div class="text-yellow-400">Crystallizing reasoning steps...</div>
+                        <div class="text-blue-400">Generated function: schedule_email_task()</div>
+                        <div class="text-emerald-400">Deployed to agent skill library</div>
+                        <div class="text-gray-400">Future requests will use deterministic code</div>
                     </div>
                 </div>
             </div>
@@ -609,7 +615,7 @@
         <div class="max-w-7xl mx-auto">
             <div class="text-center mb-16">
                 <h2 class="text-4xl md:text-5xl font-bold mb-6">
-                    <span class="bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent">Enterprise Ready</span>
+                    <span class="bg-gradient-to-r from-slate-300 to-gray-400 bg-clip-text text-transparent">Enterprise Ready</span>
                 </h2>
                 <p class="text-xl text-gray-300 max-w-3xl mx-auto">
                     Replace your RPA and workflow automation tools with intelligent agents that learn and adapt automatically.
@@ -622,7 +628,7 @@
                         <h3 class="text-xl font-bold mb-3">Beyond RPA Limitations</h3>
                         <p class="text-gray-300">Traditional RPA breaks when processes change. AutoLearn agents adapt and learn new patterns automatically.</p>
                     </div>
-                    <div class="border-l-4 border-purple-500 pl-6">
+                    <div class="border-l-4 border-slate-500 pl-6">
                         <h3 class="text-xl font-bold mb-3">Self-Correcting Systems</h3>
                         <p class="text-gray-300">When agents encounter errors, they learn from them and develop new skills to handle similar situations.</p>
                     </div>
@@ -636,19 +642,27 @@
                     <h3 class="text-2xl font-bold mb-6 text-center">Enterprise Benefits</h3>
                     <div class="space-y-4">
                         <div class="flex items-center space-x-3">
-                            <div class="w-2 h-2 bg-green-400 rounded-full"></div>
+                            <svg class="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
                             <span>90% reduction in operational costs</span>
                         </div>
                         <div class="flex items-center space-x-3">
-                            <div class="w-2 h-2 bg-blue-400 rounded-full"></div>
+                            <svg class="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
                             <span>99.9% reliability for repeated tasks</span>
                         </div>
                         <div class="flex items-center space-x-3">
-                            <div class="w-2 h-2 bg-purple-400 rounded-full"></div>
+                            <svg class="w-5 h-5 text-slate-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
                             <span>Zero-downtime process evolution</span>
                         </div>
                         <div class="flex items-center space-x-3">
-                            <div class="w-2 h-2 bg-yellow-400 rounded-full"></div>
+                            <svg class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
                             <span>Self-healing automation pipelines</span>
                         </div>
                     </div>
@@ -658,7 +672,7 @@
     </section>
 
     <!-- CTA Section -->
-    <section class="relative z-10 py-20 px-6 bg-gradient-to-r from-blue-900/30 to-purple-900/30">
+    <section class="relative z-10 py-20 px-6 bg-gradient-to-r from-slate-900/30 to-gray-900/30">
         <div class="max-w-4xl mx-auto text-center">
             <h2 class="text-4xl md:text-5xl font-bold mb-6">
                 Ready to Crystallize Your AI?
@@ -667,10 +681,10 @@
                 Join the future of AI agent development. Start building more reliable, cost-effective agents today.
             </p>
             <div class="flex flex-col sm:flex-row gap-4 justify-center">
-                <button class="bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-4 rounded-lg font-semibold text-lg hover:from-blue-600 hover:to-purple-700 transition-all transform hover:scale-105 shadow-2xl">
+                <button class="bg-emerald-600 px-8 py-4 rounded-xl font-semibold text-lg hover:bg-emerald-700 transition-all duration-200 shadow-lg hover:shadow-emerald-500/25">
                     Get Started Free
                 </button>
-                <button class="border border-gray-600 px-8 py-4 rounded-lg font-semibold text-lg hover:bg-gray-800 transition-all">
+                <button class="border border-gray-600 px-8 py-4 rounded-xl font-semibold text-lg hover:bg-gray-800 hover:border-gray-500 transition-all duration-200">
                     Schedule Demo
                 </button>
             </div>
@@ -683,7 +697,7 @@
             <div class="grid md:grid-cols-4 gap-8">
                 <div>
                     <div class="flex items-center space-x-2 mb-4">
-                        <div class="w-8 h-8 bg-gradient-to-br from-blue-400 to-purple-500 rounded-lg flex items-center justify-center">
+                        <div class="w-8 h-8 bg-gradient-to-br from-emerald-500 to-slate-600 rounded-lg flex items-center justify-center">
                             <span class="text-white font-bold text-sm">AL</span>
                         </div>
                         <span class="text-xl font-bold">AutoLearn</span>
@@ -693,17 +707,17 @@
                 <div>
                     <h4 class="font-semibold mb-4">Product</h4>
                     <div class="space-y-2 text-gray-400">
-                        <a href="#" class="block hover:text-white transition-colors">Features</a>
+                        <!-- <a href="#" class="block hover:text-white transition-colors">Features</a>
                         <a href="#" class="block hover:text-white transition-colors">Pricing</a>
-                        <a href="#" class="block hover:text-white transition-colors">Enterprise</a>
+                        <a href="#" class="block hover:text-white transition-colors">Enterprise</a> -->
                     </div>
                 </div>
                 <div>
                     <h4 class="font-semibold mb-4">Developers</h4>
                     <div class="space-y-2 text-gray-400">
-                        <a href="#" class="block hover:text-white transition-colors">Documentation</a>
-                        <a href="#" class="block hover:text-white transition-colors">API Reference</a>
-                        <a href="#" class="block hover:text-white transition-colors">GitHub</a>
+                        <!-- <a href="#" class="block hover:text-white transition-colors">Documentation</a>
+                        <a href="#" class="block hover:text-white transition-colors">API Reference</a> -->
+                        <a href="https://github.com/tarkaai/autolearn" class="block hover:text-white transition-colors">GitHub</a>
                     </div>
                 </div>
                 <div>
@@ -716,7 +730,7 @@
                 </div>
             </div>
             <div class="border-t border-gray-800 mt-12 pt-8 text-center text-gray-400">
-                <p>&copy; 2025 AutoLearn. All rights reserved.</p>
+                <p>&copy; 2025 Tarka Ventures, Inc. All rights reserved.</p>
             </div>
         </div>
     </footer>
@@ -756,12 +770,6 @@
             observer.observe(el);
         });
 
-        // Parallax effect for background
-        window.addEventListener('scroll', () => {
-            const scrolled = window.pageYOffset;
-            const rate = scrolled * -0.5;
-            document.querySelector('.fixed.inset-0.bg-gradient-to-br').style.transform = `translateY(${rate}px)`;
-        });
 
         // Interactive button effects
         document.querySelectorAll('button').forEach(button => {
