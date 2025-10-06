@@ -182,6 +182,18 @@ class SkillEngine:
         if not code:
             raise SkillNotFound(name)
         return code
+    
+    def reload_skills_from_db(self) -> None:
+        """Reload all skills from the database into memory."""
+        logger.info("Reloading skills from database...")
+        
+        # Clear current registry
+        self._registry.clear()
+        self._modules.clear()
+        
+        # Reload from database
+        self._load_skills_from_db()
+        logger.info(f"Reloaded {len(self._registry)} skills from database")
 
 
 def create_default_engine() -> SkillEngine:

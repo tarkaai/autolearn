@@ -118,6 +118,16 @@ def tools(engine: SkillEngine = Depends(get_engine)) -> list[SkillMeta]:
     """Return a list of all registered skills."""
     return engine.list_skills()
 
+@app.post("/tools/reload")
+def reload_tools(engine: SkillEngine = Depends(get_engine)) -> JSONResponse:
+    """Reload skills from the database."""
+    try:
+        engine.reload_skills_from_db()
+        return JSONResponse({"status": "success", "message": "Skills reloaded from database"})
+    except Exception as e:
+        logger.error(f"Error reloading skills: {e}")
+        raise HTTPException(status_code=500, detail=f"Error reloading skills: {str(e)}")
+
 
 # Session management endpoints
 

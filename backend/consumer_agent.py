@@ -59,12 +59,45 @@ class MCPClient:
     def __init__(self, server_url: str = "http://localhost:8000/mcp"):
         self.server_url = server_url
         self.session = httpx.AsyncClient()
+        self.initialized = False
+        self.server_capabilities = None
         
     async def __aenter__(self):
         return self
         
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.session.aclose()
+    
+    async def initialize(self) -> Dict[str, Any]:
+        """Initialize MCP connection with the server."""
+        if self.initialized:
+            return {"status": "already_initialized"}
+        
+        init_params = {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {
+                "tools": {}  # Client supports tools
+            },
+            "clientInfo": {
+                "name": "AutoLearn-ConsumerAgent",
+                "version": "0.1.0"
+            }
+        }
+        
+        try:
+            result = await self.call_method("initialize", init_params)
+            
+            if result:
+                self.initialized = True
+                self.server_capabilities = result.get("capabilities", {})
+                logger.info(f"MCP client initialized. Server capabilities: {self.server_capabilities}")
+                return result
+            else:
+                raise Exception("MCP initialization failed - no result returned")
+                
+        except Exception as e:
+            logger.error(f"MCP initialization failed: {e}")
+            raise Exception(f"Failed to initialize MCP connection: {e}")
         
     async def call_method(self, method: str, params: Optional[Dict[str, Any]] = None) -> Any:
         """Make a JSON-RPC 2.0 call to the MCP server."""
@@ -81,28 +114,60 @@ class MCPClient:
             response = await self.session.post(
                 self.server_url,
                 json=payload,
-                headers={"Content-Type": "application/json"}
+                headers={"Content-Type": "application/json"},
+                timeout=10.0
             )
             response.raise_for_status()
             
             result = response.json()
             
+            # Handle MCP protocol errors
             if "error" in result:
-                raise Exception(f"MCP Error: {result['error']}")
+                error_info = result["error"]
+                error_code = error_info.get("code", -32603)
+                error_message = error_info.get("message", "Unknown MCP error")
+                
+                logger.error(f"MCP Error {error_code}: {error_message}")
+                
+                # Map common MCP error codes to user-friendly messages
+                if error_code == -32601:  # Method not found
+                    raise Exception(f"MCP method '{method}' not supported by server")
+                elif error_code == -32602:  # Invalid params
+                    raise Exception(f"Invalid parameters for MCP method '{method}': {error_message}")
+                elif error_code == -32603:  # Internal error
+                    raise Exception(f"Server error in MCP method '{method}': {error_message}")
+                else:
+                    raise Exception(f"MCP Error {error_code}: {error_message}")
                 
             return result.get("result")
             
+        except httpx.TimeoutException:
+            logger.error(f"MCP request timed out for method: {method}")
+            raise Exception(f"Request to MCP server timed out")
+        except httpx.ConnectError:
+            logger.error(f"Failed to connect to MCP server at {self.server_url}")
+            raise Exception(f"Unable to connect to MCP server at {self.server_url}")
         except httpx.RequestError as e:
             logger.error(f"MCP request failed: {e}")
-            raise Exception(f"Failed to connect to MCP server: {e}")
+            raise Exception(f"Network error connecting to MCP server: {e}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON response from MCP server: {e}")
+            raise Exception("Invalid response format from MCP server")
+        except Exception as e:
+            logger.error(f"Unexpected error in MCP request: {e}")
+            raise
             
     async def list_tools(self) -> List[Dict[str, Any]]:
         """Get list of available tools from MCP server."""
+        if not self.initialized:
+            await self.initialize()
         result = await self.call_method("tools/list")
         return result.get("tools", [])
         
     async def call_tool(self, name: str, arguments: Dict[str, Any]) -> Any:
         """Execute a tool via MCP server."""
+        if not self.initialized:
+            await self.initialize()
         # Convert complex parameters to JSON strings for portability
         serialized_args = self._serialize_parameters(arguments)
         return await self.call_method("tools/call", {
@@ -124,6 +189,45 @@ class MCPClient:
                 serialized[key] = value
                 
         return serialized
+    
+    def convert_mcp_tools_to_openai_functions(self, mcp_tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Convert MCP tool schemas to OpenAI function definitions."""
+        openai_functions = []
+        
+        for tool in mcp_tools:
+            # Get the input schema and clean it up
+            input_schema = tool.get("inputSchema", {
+                "type": "object",
+                "properties": {},
+                "required": []
+            })
+            
+            # Clean up invalid type values for OpenAI
+            if "properties" in input_schema:
+                for prop_name, prop_def in input_schema["properties"].items():
+                    if isinstance(prop_def, dict) and "type" in prop_def:
+                        # Replace invalid types with valid ones
+                        if prop_def["type"] in ["any", "str"]:
+                            prop_def["type"] = "string"
+                        elif prop_def["type"] == "number":
+                            prop_def["type"] = "number"
+                        elif prop_def["type"] == "int":
+                            prop_def["type"] = "integer"
+                        elif prop_def["type"] == "bool":
+                            prop_def["type"] = "boolean"
+            
+            # Convert MCP tool to OpenAI function format
+            function_def = {
+                "type": "function",
+                "function": {
+                    "name": tool["name"],
+                    "description": tool.get("description", ""),
+                    "parameters": input_schema
+                }
+            }
+            openai_functions.append(function_def)
+            
+        return openai_functions
 
 
 class ConsumerAgent:
@@ -217,13 +321,33 @@ Always be helpful, clear, and transparent about what skills you're using or crea
         # Analyze user intent and determine actions
         async with MCPClient(self.mcp_server_url) as mcp:
             try:
+                logger.info(f"Starting MCP client with server URL: {self.mcp_server_url}")
+                
                 # Get available tools from MCP server
                 available_tools = await mcp.list_tools()
+                logger.info(f"Retrieved {len(available_tools)} tools from MCP server")
                 
-                # Use OpenAI to determine response and actions
-                response = await self._generate_response(
-                    context, user_message, available_tools
-                )
+                # Convert MCP tools to OpenAI function definitions
+                openai_functions = mcp.convert_mcp_tools_to_openai_functions(available_tools)
+                logger.info(f"Converted to {len(openai_functions)} OpenAI function definitions")
+                
+                # Use OpenAI with function calling to determine response and actions
+                # Fall back to old approach if no API key is available
+                if self.openai_client.config.api_key:
+                    try:
+                        response = await self._generate_response_with_functions(
+                            context, user_message, openai_functions, mcp
+                        )
+                    except Exception as e:
+                        logger.warning(f"Function calling failed, falling back to old approach: {e}")
+                        response = await self._generate_response(
+                            context, user_message, available_tools
+                        )
+                else:
+                    logger.info("No OpenAI API key available, using old approach")
+                    response = await self._generate_response(
+                        context, user_message, available_tools
+                    )
                 
                 # Add agent response to context
                 assistant_msg = ConversationMessage(
@@ -275,6 +399,152 @@ Always be helpful, clear, and transparent about what skills you're using or crea
                 
                 return error_response
                 
+    async def _generate_response_with_functions(
+        self, 
+        context: ConversationContext,
+        user_message: str,
+        openai_functions: List[Dict[str, Any]],
+        mcp_client: MCPClient
+    ) -> Dict[str, Any]:
+        """Generate agent response using OpenAI function calling with MCP tools."""
+        
+        # Create conversation history for OpenAI
+        messages = []
+        for msg in context.messages[-10:]:  # Last 10 messages for context
+            messages.append({
+                "role": msg.role,
+                "content": msg.content
+            })
+        
+        # Add current user message
+        messages.append({
+            "role": "user",
+            "content": user_message
+        })
+        
+        try:
+            # Use OpenAI with function calling
+            client = OpenAI(api_key=self.openai_client.config.api_key)
+            
+            completion = client.chat.completions.create(
+                model=self.openai_client.config.model_name,
+                messages=messages,
+                tools=openai_functions if openai_functions else None,
+                tool_choice="auto" if openai_functions else None,
+                temperature=self.openai_client.config.temperature,
+                max_tokens=1000,
+                timeout=30
+            )
+            
+            assistant_message = completion.choices[0].message
+            
+            # Handle function calls if any
+            actions = []
+            if assistant_message.tool_calls:
+                logger.info(f"OpenAI generated {len(assistant_message.tool_calls)} function calls")
+                
+                for tool_call in assistant_message.tool_calls:
+                    function_name = tool_call.function.name
+                    function_args = json.loads(tool_call.function.arguments)
+                    
+                    logger.info(f"Executing function: {function_name} with args: {function_args}")
+                    
+                    try:
+                        # Execute the function via MCP
+                        result = await mcp_client.call_tool(function_name, function_args)
+                        
+                        # Extract the actual result value
+                        clean_result = self._extract_result_value(result)
+                        
+                        # Check if the result indicates an error
+                        if isinstance(clean_result, str) and clean_result.startswith("Error:"):
+                            raise Exception(clean_result)
+                        
+                        action = {
+                            "type": "skill_used",
+                            "skill_name": function_name,
+                            "result": clean_result,
+                            "raw_result": result,
+                            "inputs": function_args
+                        }
+                        actions.append(action)
+                        
+                        # Add tool result to conversation for follow-up
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": str(clean_result)
+                        })
+                        
+                        # Update context
+                        context.skills_used.append(function_name)
+                        
+                    except Exception as e:
+                        error_msg = str(e)
+                        logger.error(f"Error executing function {function_name}: {error_msg}")
+                        
+                        action = {
+                            "type": "skill_error",
+                            "skill_name": function_name,
+                            "error": error_msg,
+                            "inputs": function_args
+                        }
+                        actions.append(action)
+                        
+                        # Add error to conversation with more context
+                        error_content = f"Error executing {function_name}: {error_msg}"
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": error_content
+                        })
+                
+                # Get final response after function execution
+                if messages:  # If we added tool results
+                    final_completion = client.chat.completions.create(
+                        model=self.openai_client.config.model_name,
+                        messages=messages,
+                        temperature=self.openai_client.config.temperature,
+                        max_tokens=500,
+                        timeout=15
+                    )
+                    assistant_message = final_completion.choices[0].message
+            
+            # Get the final message content
+            agent_response = assistant_message.content or "I've executed the requested actions."
+            
+            # Get skill suggestions
+            suggestions = await self._get_skill_suggestions(user_message, 
+                [{"name": f["function"]["name"], "description": f["function"]["description"]} 
+                 for f in openai_functions])
+            
+            return {
+                "message": agent_response,
+                "actions": actions,
+                "suggestions": suggestions,
+                "needs_skill_generation": False,  # Function calling handles this automatically
+                "session_id": context.session_id
+            }
+            
+        except Exception as e:
+            logger.error(f"OpenAI function calling error: {e}")
+            # Fall back to old approach
+            logger.info("Falling back to old analysis approach")
+            # Get available tools from MCP client for fallback
+            try:
+                available_tools = await mcp_client.list_tools()
+                return await self._generate_response(
+                    context, user_message, available_tools
+                )
+            except Exception as fallback_error:
+                logger.error(f"Fallback also failed: {fallback_error}")
+                return {
+                    "message": "I'm having trouble processing your request right now. Could you try rephrasing it?",
+                    "actions": [],
+                    "suggestions": [],
+                    "needs_skill_generation": False
+                }
+
     async def _generate_response(
         self, 
         context: ConversationContext,

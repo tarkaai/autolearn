@@ -16,6 +16,7 @@ import sys
 import subprocess
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 
 def run_tests(category=None, verbose=False):
@@ -24,6 +25,9 @@ def run_tests(category=None, verbose=False):
     # Change to project root
     project_root = Path(__file__).parent
     os.chdir(project_root)
+    
+    # Load environment variables from .env file
+    load_dotenv()
     
     # Base pytest command - use venv python
     venv_python = project_root / ".venv" / "bin" / "python"
