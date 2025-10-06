@@ -9,7 +9,7 @@ Unlike static MCP servers, AutoLearn introduces a **coding agent** that:
 
 [![AutoLearn Demo](https://github.com/tarkaai/autolearn/blob/a900df9a18ff6675fc904e7f51f37b3e450726df/video-thumbnail.png)](https://www.youtube.com/watch?v=s_9m4P9_6jc)
 
-Learn More: http://www.agentr9y.com/
+Learn More: https://www.autolearn.dev/
 
 The project includes a **frontend demo app** where users can:  
 - Chat with a consuming agent that uses AutoLearn.  
@@ -69,7 +69,7 @@ autolearn/
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/<your-org>/autolearn.git
+git clone https://github.com/tarkaai/autolearn.git
 cd autolearn
 ```
 
