@@ -51,24 +51,26 @@
     
 
     <!-- Navigation -->
-    <nav class="relative z-50 px-6 py-4 border-b border-gray-800/50 backdrop-blur-xl">
-        <div class="max-w-7xl mx-auto flex items-center justify-between">
-            <div class="flex items-center space-x-2">
-                <div class="w-8 h-8 bg-gradient-to-br from-emerald-500 to-slate-600 rounded-lg flex items-center justify-center">
-                    <span class="text-white font-bold text-sm">AL</span>
-                </div>
-                <span class="text-xl font-bold">AutoLearn</span>
-            </div>
-            <div class="hidden md:flex items-center space-x-8">
-                <a href="#features" class="text-gray-300 hover:text-white transition-colors">Features</a>
-                <a href="#enterprise" class="text-gray-300 hover:text-white transition-colors">Enterprise</a>
-                <a href="#docs" class="text-gray-300 hover:text-white transition-colors">Docs</a>
-                <button class="bg-emerald-600 px-4 py-2 rounded-lg font-medium hover:bg-emerald-700 transition-all duration-200">
-                    Get Started
-                </button>
-            </div>
-        </div>
-    </nav>
+    <div id="navbar-container" class="relative">
+        <nav id="navbar" class="relative z-50 px-6 py-4 border-b border-gray-800/50 backdrop-blur-xl transition-all duration-500 ease-out">
+            <div class="max-w-7xl mx-auto flex items-center justify-between">
+              <div class="flex items-center space-x-2">
+                  <div class="w-8 h-8 bg-gradient-to-br from-emerald-500 to-slate-600 rounded-lg flex items-center justify-center">
+                      <span class="text-white font-bold text-sm">AL</span>
+                  </div>
+                  <span class="text-xl font-bold">AutoLearn</span>
+              </div>
+              <div class="hidden md:flex items-center space-x-8">
+                  <a href="#features" class="text-gray-300 hover:text-white transition-colors">Features</a>
+                  <a href="#enterprise" class="text-gray-300 hover:text-white transition-colors">Enterprise</a>
+                  <a href="#docs" class="text-gray-300 hover:text-white transition-colors">Docs</a>
+                  <button class="bg-emerald-600 px-4 py-2 rounded-lg font-medium hover:bg-emerald-700 transition-all duration-200">
+                      Get Started
+                  </button>
+              </div>
+          </div>
+        </nav>
+    </div>
 
     <!-- Hero Section -->
     <section class="relative z-10 pt-20 pb-32 px-6">
@@ -779,6 +781,42 @@
             button.addEventListener('mouseleave', () => {
                 button.style.transform = 'translateY(0)';
             });
+        });
+
+        // Navbar transition effect
+        const navbar = document.getElementById('navbar');
+        const navbarContainer = document.getElementById('navbar-container');
+        let isFloating = false;
+        
+        // Store the original height
+        const originalHeight = navbar.offsetHeight;
+        
+        window.addEventListener('scroll', () => {
+            const scrollY = window.scrollY;
+            
+            if (scrollY > 50 && !isFloating) {
+                // Set container height before transition to prevent jump
+                navbarContainer.style.height = originalHeight + 'px';
+                
+                // Transform to floating container
+                navbar.className = 'fixed top-4 left-6 right-6 z-50 px-6 py-3 rounded-2xl bg-gray-900/80 backdrop-blur-xl border border-gray-700/30 shadow-2xl transition-all duration-500 ease-out';
+                navbar.style.maxWidth = '1400px';
+                // navbar.style.width = 'auto';
+                navbar.style.margin = '0 auto';
+                
+                isFloating = true;
+            } else if (scrollY <= 50 && isFloating) {
+                // Return to full navbar
+                navbar.className = 'relative z-50 px-6 py-4 border-b border-gray-800/50 backdrop-blur-xl transition-all duration-500 ease-out';
+                navbar.style.maxWidth = '';
+                navbar.style.width = '';
+                navbar.style.margin = '';
+                
+                // Reset container height
+                navbarContainer.style.height = '';
+                
+                isFloating = false;
+            }
         });
     </script>
 </body>
