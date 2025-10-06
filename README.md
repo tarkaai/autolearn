@@ -73,11 +73,19 @@ git clone https://github.com/tarkaai/autolearn.git
 cd autolearn
 ```
 
-### 2. Backend Setup
+### 2. Setup Backend and Frontend
 ```bash
 python -m venv .venv
 source .venv/bin/activate   # or .venv\Scripts\activate on Windows
 pip install -e .   # Install in development mode
+```
+
+```bash
+# Navigate to the frontend directory
+cd frontend
+
+# Install dependencies
+npm install
 ```
 
 ### 3. Set up OpenAI API Key
@@ -91,28 +99,17 @@ export OPENAI_API_KEY=your-api-key-here
 export OPENAI_MODEL=gpt-4.1-mini  # Optional, default is gpt-4.1
 ```
 
-### 4. Run the Server
+### 4. Run the Demo
 ```bash
 # Using the convenience script (loads .env automatically)
-python server.py
+python demo.py
 
-# Or directly with uvicorn
-uvicorn backend.app:app --reload
+# Or start the frontend and backend separately
+python server.py
+cd frontend && npm run dev
 ```
 
 The API will be available at http://localhost:8000
-
-### 5. Frontend Setup
-```bash
-# Navigate to the frontend directory
-cd frontend
-
-# Install dependencies
-npm install
-
-# Start the development server
-npm run dev
-```
 
 The frontend will be available at http://localhost:3000
 
@@ -188,7 +185,7 @@ Visit http://localhost:3000 to see the full demo with:
 
 ## Testing
 
-AutoLearn has comprehensive test coverage with 54/54 tests passing:
+AutoLearn has comprehensive test coverage that drove the initial development
 
 ```bash
 # Run all tests (54 total tests)
