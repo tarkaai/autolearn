@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import asyncio
+import uuid
 from typing import Any, Dict, List, Optional, Union
 from datetime import datetime
 from pydantic import BaseModel, Field
@@ -18,7 +19,8 @@ import httpx
 from openai import OpenAI
 
 from .openai_client import OpenAIClient, OpenAIConfig
-from .schemas import SkillMeta
+from .schemas import SkillMeta, ChatSession, ChatMessage, CreateSessionRequest
+from . import db, sessions
 
 logger = logging.getLogger("autolearn.consumer_agent")
 
@@ -147,8 +149,12 @@ class ConsumerAgent:
         
     async def start_conversation(self, user_id: str = "default") -> str:
         """Start a new conversation session."""
-        session_id = f"{user_id}_{datetime.now().timestamp()}"
+        # Create a database session
+        session_request = CreateSessionRequest(name=f"AutoLearn Chat - {user_id}")
+        db_session = sessions.create_session(session_request)
+        session_id = db_session.id
         
+        # Also create in-memory context for immediate use
         context = ConversationContext(
             session_id=session_id,
             messages=[
@@ -189,10 +195,24 @@ Always be helpful, clear, and transparent about what skills you're using or crea
         context = self.conversations[session_id]
         
         # Add user message to context
-        context.messages.append(ConversationMessage(
+        user_msg = ConversationMessage(
             role="user",
             content=user_message
-        ))
+        )
+        context.messages.append(user_msg)
+        
+        # Save user message to database
+        try:
+            from .schemas import AddMessageRequest
+            db.add_message(ChatMessage(
+                id=str(uuid.uuid4()),
+                session_id=session_id,
+                role="user",
+                content=user_message,
+                timestamp=user_msg.timestamp
+            ))
+        except Exception as e:
+            logger.error(f"Error saving user message to database: {e}")
         
         # Analyze user intent and determine actions
         async with MCPClient(self.mcp_server_url) as mcp:
@@ -206,10 +226,23 @@ Always be helpful, clear, and transparent about what skills you're using or crea
                 )
                 
                 # Add agent response to context
-                context.messages.append(ConversationMessage(
+                assistant_msg = ConversationMessage(
                     role="assistant",
                     content=response["message"]
-                ))
+                )
+                context.messages.append(assistant_msg)
+                
+                # Save assistant message to database
+                try:
+                    db.add_message(ChatMessage(
+                        id=str(uuid.uuid4()),
+                        session_id=session_id,
+                        role="assistant",
+                        content=response["message"],
+                        timestamp=assistant_msg.timestamp
+                    ))
+                except Exception as e:
+                    logger.error(f"Error saving assistant message to database: {e}")
                 
                 return response
                 
@@ -222,10 +255,23 @@ Always be helpful, clear, and transparent about what skills you're using or crea
                     "needs_skill_generation": False
                 }
                 
-                context.messages.append(ConversationMessage(
+                error_msg = ConversationMessage(
                     role="assistant",
                     content=error_response["message"]
-                ))
+                )
+                context.messages.append(error_msg)
+                
+                # Save error message to database
+                try:
+                    db.add_message(ChatMessage(
+                        id=str(uuid.uuid4()),
+                        session_id=session_id,
+                        role="assistant",
+                        content=error_response["message"],
+                        timestamp=error_msg.timestamp
+                    ))
+                except Exception as e:
+                    logger.error(f"Error saving error message to database: {e}")
                 
                 return error_response
                 
@@ -388,15 +434,59 @@ Respond in a natural, conversational way while being clear about what actions yo
                 elif analysis.get("action") == "improve":
                     logger.info(f"AI suggests improving existing skill for: {user_message}")
                     improvement_info = analysis.get("skill_to_improve", {})
-                    actions.append({
-                        "type": "skill_improvement_suggested",
-                        "current_skill": improvement_info.get("current_name"),
-                        "improvements": improvement_info.get("improvements"),
-                        "new_description": improvement_info.get("new_description"),
-                        "ai_reasoning": analysis.get("reasoning", "")
-                    })
                     
-                    agent_response += f"\n\n💡 I notice that the existing '{improvement_info.get('current_name')}' skill could be improved to better handle your request. Suggested improvements: {improvement_info.get('improvements')}"
+                    try:
+                        # Actually execute the skill improvement
+                        improvement_result = await self._execute_skill_improvement(
+                            improvement_info.get("current_name"),
+                            improvement_info.get("improvements"),
+                            improvement_info.get("new_description")
+                        )
+                        
+                        if improvement_result["success"]:
+                            actions.append({
+                                "type": "skill_improved",
+                                "current_skill": improvement_info.get("current_name"),
+                                "improvements": improvement_info.get("improvements"),
+                                "new_description": improvement_info.get("new_description"),
+                                "ai_reasoning": analysis.get("reasoning", ""),
+                                "improvement_result": improvement_result
+                            })
+                            
+                            agent_response += f"\n\n🔧 I've improved the '{improvement_info.get('current_name')}' skill to better handle your request! The improvements include: {improvement_info.get('improvements')}"
+                            
+                            # Mark skill as used since we improved it for this request
+                            context.skills_used.append(improvement_info.get("current_name"))
+                            actions.append({
+                                "type": "skill_used",
+                                "skill_name": improvement_info.get("current_name")
+                            })
+                        else:
+                            # Fallback to suggestion if improvement fails
+                            actions.append({
+                                "type": "skill_improvement_suggested",
+                                "current_skill": improvement_info.get("current_name"),
+                                "improvements": improvement_info.get("improvements"),
+                                "new_description": improvement_info.get("new_description"),
+                                "ai_reasoning": analysis.get("reasoning", ""),
+                                "improvement_error": improvement_result.get("error", "Unknown error")
+                            })
+                            
+                            agent_response += f"\n\n💡 I notice that the existing '{improvement_info.get('current_name')}' skill could be improved to better handle your request. Suggested improvements: {improvement_info.get('improvements')}"
+                            
+                    except Exception as e:
+                        logger.error(f"Skill improvement failed: {e}")
+                        # Fallback to suggestion
+                        actions.append({
+                            "type": "skill_improvement_suggested",
+                            "current_skill": improvement_info.get("current_name"),
+                            "improvements": improvement_info.get("improvements"),
+                            "new_description": improvement_info.get("new_description"),
+                            "ai_reasoning": analysis.get("reasoning", ""),
+                            "improvement_error": str(e)
+                        })
+                        
+                        agent_response += f"\n\n💡 I notice that the existing '{improvement_info.get('current_name')}' skill could be improved to better handle your request. Suggested improvements: {improvement_info.get('improvements')}"
                     
                 else:
                     logger.info(f"AI analysis complete. No additional actions needed.")
@@ -601,15 +691,45 @@ Be intelligent about parameter extraction - if the user provides specific values
                         logger.warning(f"Recommended skill '{skill_name}' not found in available tools")
                 
                 elif analysis.get("action") == "improve":
-                    # Store improvement suggestion for later processing
+                    # Execute skill improvement
                     improvement_info = analysis.get("skill_to_improve", {})
-                    executed_actions.append({
-                        "type": "skill_improvement_suggested",
-                        "current_skill": improvement_info.get("current_name"),
-                        "improvements": improvement_info.get("improvements"),
-                        "new_description": improvement_info.get("new_description"),
-                        "ai_reasoning": analysis.get("reasoning", "")
-                    })
+                    
+                    try:
+                        improvement_result = await self._execute_skill_improvement(
+                            improvement_info.get("current_name"),
+                            improvement_info.get("improvements"),
+                            improvement_info.get("new_description")
+                        )
+                        
+                        if improvement_result["success"]:
+                            executed_actions.append({
+                                "type": "skill_improved",
+                                "current_skill": improvement_info.get("current_name"),
+                                "improvements": improvement_info.get("improvements"),
+                                "new_description": improvement_info.get("new_description"),
+                                "ai_reasoning": analysis.get("reasoning", ""),
+                                "improvement_result": improvement_result
+                            })
+                        else:
+                            # Fallback to suggestion if improvement fails
+                            executed_actions.append({
+                                "type": "skill_improvement_suggested",
+                                "current_skill": improvement_info.get("current_name"),
+                                "improvements": improvement_info.get("improvements"),
+                                "new_description": improvement_info.get("new_description"),
+                                "ai_reasoning": analysis.get("reasoning", ""),
+                                "improvement_error": improvement_result.get("error", "Unknown error")
+                            })
+                    except Exception as e:
+                        logger.error(f"Skill improvement failed: {e}")
+                        executed_actions.append({
+                            "type": "skill_improvement_suggested",
+                            "current_skill": improvement_info.get("current_name"),
+                            "improvements": improvement_info.get("improvements"),
+                            "new_description": improvement_info.get("new_description"),
+                            "ai_reasoning": analysis.get("reasoning", ""),
+                            "improvement_error": str(e)
+                        })
                 
                 # For "create" action, we'll handle this in the calling function
                 
@@ -618,6 +738,84 @@ Be intelligent about parameter extraction - if the user provides specific values
         
         return executed_actions
     
+    async def _execute_skill_improvement(
+        self,
+        skill_name: str,
+        improvements: str,
+        new_description: str
+    ) -> Dict[str, Any]:
+        """Execute skill improvement by calling the improvement endpoint."""
+        try:
+            # Get current skill code from the MCP server
+            async with MCPClient(self.mcp_server_url) as mcp:
+                # First, get the current skill code
+                try:
+                    # Try to get skill code via MCP (if available) or direct API call
+                    import httpx
+                    async with httpx.AsyncClient() as client:
+                        response = await client.get(f"{self.mcp_server_url.replace('/mcp', '')}/skills/{skill_name}/code")
+                        if response.status_code == 200:
+                            skill_data = response.json()
+                            current_code = skill_data.get("code", "")
+                        else:
+                            return {
+                                "success": False,
+                                "error": f"Could not retrieve current code for skill {skill_name}"
+                            }
+                except Exception as e:
+                    return {
+                        "success": False,
+                        "error": f"Failed to get current skill code: {str(e)}"
+                    }
+                
+                # Create improvement request
+                improvement_request = {
+                    "skill_name": skill_name,
+                    "current_code": current_code,
+                    "improvement_prompt": f"Improve this skill: {improvements}. New description: {new_description}"
+                }
+                
+                # Call the improvement endpoint
+                try:
+                    async with httpx.AsyncClient() as client:
+                        response = await client.post(
+                            f"{self.mcp_server_url.replace('/mcp', '')}/skills/improve",
+                            json=improvement_request,
+                            timeout=60.0
+                        )
+                        
+                        if response.status_code == 200:
+                            result = response.json()
+                            if result.get("success"):
+                                logger.info(f"Successfully improved skill {skill_name}")
+                                return {
+                                    "success": True,
+                                    "improved_skill": result.get("improved_skill"),
+                                    "message": f"Successfully improved {skill_name}"
+                                }
+                            else:
+                                return {
+                                    "success": False,
+                                    "error": result.get("error", "Improvement failed")
+                                }
+                        else:
+                            return {
+                                "success": False,
+                                "error": f"HTTP {response.status_code}: {response.text}"
+                            }
+                except Exception as e:
+                    return {
+                        "success": False,
+                        "error": f"Failed to call improvement endpoint: {str(e)}"
+                    }
+                    
+        except Exception as e:
+            logger.error(f"Error in skill improvement execution: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+
     async def _attempt_skill_improvement(
         self, 
         skill_name: str, 
@@ -1077,7 +1275,38 @@ Please analyze and fix the issue while maintaining the skill's core functionalit
                 
     def get_conversation_history(self, session_id: str) -> Optional[ConversationContext]:
         """Get conversation history for a session."""
-        return self.conversations.get(session_id)
+        # First check if we have it in memory
+        if session_id in self.conversations:
+            return self.conversations[session_id]
+        
+        # If not in memory, try to load from database
+        try:
+            db_session = db.get_session(session_id)
+            if db_session and db_session.messages:
+                # Convert database messages to conversation context
+                messages = []
+                for msg in db_session.messages:
+                    messages.append(ConversationMessage(
+                        role=msg.role,
+                        content=msg.content,
+                        timestamp=msg.timestamp,
+                        metadata={}
+                    ))
+                
+                context = ConversationContext(
+                    session_id=session_id,
+                    messages=messages,
+                    skills_used=[],  # TODO: Extract from message metadata
+                    skills_requested=[]  # TODO: Extract from message metadata
+                )
+                
+                # Cache in memory for future use
+                self.conversations[session_id] = context
+                return context
+        except Exception as e:
+            logger.error(f"Error loading session from database: {e}")
+        
+        return None
 
 
 # Singleton instance for the app

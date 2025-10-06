@@ -45,9 +45,14 @@ export default function UserChat({ onSkillGenerated, onSkillUsed }: UserChatProp
   const [suggestions, setSuggestions] = useState<SkillSuggestion[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Initialize session on component mount
+  // Load session from localStorage on mount, or create new one
   useEffect(() => {
-    initializeSession();
+    const savedSessionId = localStorage.getItem('autolearn_session_id');
+    if (savedSessionId) {
+      restoreSession(savedSessionId);
+    } else {
+      initializeSession();
+    }
   }, []);
 
   // Scroll to bottom when messages change
@@ -60,6 +65,9 @@ export default function UserChat({ onSkillGenerated, onSkillUsed }: UserChatProp
       const response = await apiClient.startAgentSession();
       setSessionId(response.session_id);
       
+      // Save session ID to localStorage
+      localStorage.setItem('autolearn_session_id', response.session_id);
+      
       // Add welcome message
       setMessages([{
         role: "assistant",
@@ -69,6 +77,49 @@ export default function UserChat({ onSkillGenerated, onSkillUsed }: UserChatProp
     } catch (error) {
       toast.error("Failed to start conversation session");
       console.error("Session initialization error:", error);
+    }
+  };
+
+  const restoreSession = async (sessionId: string) => {
+    try {
+      // Try to get the conversation history from the consumer agent
+      const history = await apiClient.getConversationHistory(sessionId);
+      if (history && history.messages.length > 0) {
+        setSessionId(sessionId);
+        
+        // Convert backend messages to frontend format, filtering out system messages
+        const restoredMessages: AgentMessage[] = history.messages
+          .filter(msg => msg.role !== "system") // Filter out system instructions
+          .map(msg => ({
+            role: msg.role as "user" | "assistant" | "system",
+            content: msg.content,
+            timestamp: msg.timestamp,
+            suggestions: [],
+            actions: [],
+            needs_skill_generation: false
+          }));
+        
+        // If there are no non-system messages, add the intro message
+        if (restoredMessages.length === 0) {
+          restoredMessages.push({
+            role: "assistant",
+            content: "Hi! I'm AutoLearn. I can help you by using existing skills or creating new ones when needed. What would you like to do today?",
+            timestamp: new Date().toISOString()
+          });
+        }
+        
+        setMessages(restoredMessages);
+        toast.success("Restored previous conversation");
+      } else {
+        // Session doesn't exist or is empty, start a new one
+        localStorage.removeItem('autolearn_session_id');
+        initializeSession();
+      }
+    } catch (error) {
+      console.error("Session restoration error:", error);
+      // Session doesn't exist, start a new one
+      localStorage.removeItem('autolearn_session_id');
+      initializeSession();
     }
   };
 
@@ -120,8 +171,19 @@ export default function UserChat({ onSkillGenerated, onSkillUsed }: UserChatProp
       // Notify parent of any actions
       if (response.actions && response.actions.length > 0) {
         const skillsUsed = response.actions.filter(action => action.type === "skill_used");
+        const skillsImproved = response.actions.filter(action => action.type === "skill_improved");
+        const skillsGenerated = response.actions.filter(action => action.type === "skill_generated");
+        
         if (skillsUsed.length > 0) {
           toast.success(`Successfully executed ${skillsUsed.length} skill${skillsUsed.length > 1 ? 's' : ''}: ${skillsUsed.map(a => a.skill_name).join(', ')}`);
+        }
+        
+        if (skillsImproved.length > 0) {
+          toast.success(`Successfully improved ${skillsImproved.length} skill${skillsImproved.length > 1 ? 's' : ''}: ${skillsImproved.map(a => a.current_skill).join(', ')}`);
+        }
+        
+        if (skillsGenerated.length > 0) {
+          toast.success(`Successfully generated ${skillsGenerated.length} new skill${skillsGenerated.length > 1 ? 's' : ''}: ${skillsGenerated.map(a => a.skill_name || a.skill?.name).join(', ')}`);
         }
         
         response.actions.forEach(action => {
@@ -130,6 +192,9 @@ export default function UserChat({ onSkillGenerated, onSkillUsed }: UserChatProp
           }
           if (action.type === "skill_generated" && onSkillGenerated) {
             onSkillGenerated(action.skill);
+          }
+          if (action.type === "skill_improved" && onSkillUsed) {
+            onSkillUsed(action.current_skill);
           }
         });
       }
@@ -198,18 +263,43 @@ export default function UserChat({ onSkillGenerated, onSkillUsed }: UserChatProp
     }
   };
 
+  const startNewSession = () => {
+    // Clear current session
+    setSessionId(null);
+    setMessages([]);
+    setSuggestions([]);
+    
+    // Remove from localStorage
+    localStorage.removeItem('autolearn_session_id');
+    
+    // Start new session
+    initializeSession();
+    toast.success("Started new conversation");
+  };
+
   return (
     <Card className="h-full flex flex-col">
       <CardHeader className="flex-shrink-0">
-        <CardTitle className="flex items-center gap-2">
-          <BotIcon className="h-5 w-5" />
-          AI Assistant Chat
-          {sessionId && (
-            <Badge variant="secondary" className="text-xs">
-              Session: {sessionId.slice(-8)}
-            </Badge>
-          )}
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <BotIcon className="h-5 w-5" />
+            AI Assistant Chat
+            {sessionId && (
+              <Badge variant="secondary" className="text-xs">
+                Session: {sessionId.slice(-8)}
+              </Badge>
+            )}
+          </CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={startNewSession}
+            disabled={isLoading}
+            className="text-xs"
+          >
+            New Session
+          </Button>
+        </div>
       </CardHeader>
 
       <CardContent className="flex-1 flex flex-col gap-4 p-4 min-h-0">
@@ -275,6 +365,44 @@ export default function UserChat({ onSkillGenerated, onSkillUsed }: UserChatProp
                             {action.result && (
                               <div className="mt-1 text-xs text-green-700 dark:text-green-300 font-mono">
                                 Result: {typeof action.result === 'object' ? JSON.stringify(action.result) : action.result}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      ))}
+                      {message.actions.map((action, idx) => (
+                        action.type === "skill_improved" && (
+                          <div key={idx} className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-2">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100">
+                                🔧 {action.current_skill}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                Improved
+                              </span>
+                            </div>
+                            {action.improvements && (
+                              <div className="mt-1 text-xs text-blue-700 dark:text-blue-300">
+                                Improvements: {action.improvements}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      ))}
+                      {message.actions.map((action, idx) => (
+                        action.type === "skill_generated" && (
+                          <div key={idx} className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-2">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="secondary" className="text-xs bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-100">
+                                🎉 {action.skill_name || action.skill?.name}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                Generated
+                              </span>
+                            </div>
+                            {action.description && (
+                              <div className="mt-1 text-xs text-purple-700 dark:text-purple-300">
+                                {action.description}
                               </div>
                             )}
                           </div>
