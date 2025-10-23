@@ -104,6 +104,14 @@ The function should:
 - Return a dictionary with the results
 - Handle errors gracefully
 
+IMPORTANT - Available APIs within skills:
+- call_skill(name: str, **kwargs) -> Any: Call another registered skill
+  Example: result = call_skill('calculator', operation='add', a=5, b=3)
+  Example: area = call_skill('circle_area', radius=10)
+
+When generating skills, prefer to compose existing skills rather than reimplementing their functionality.
+If the user mentions existing skills that could be used, leverage them with call_skill().
+
 The metadata should include:
 - name: Skill name (lowercase with underscores)
 - description: 1-2 sentence description

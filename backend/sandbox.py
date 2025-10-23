@@ -132,6 +132,7 @@ def execute_sandboxed(
 def run_skill_sandboxed(
     skill_func: Callable[..., Any],
     args: Dict[str, Any],
+    skill_context: Optional[Any] = None,
     timeout_seconds: int = 30,
     max_memory_mb: int = 100
 ) -> Any:
@@ -140,6 +141,7 @@ def run_skill_sandboxed(
     Args:
         skill_func: The skill function to execute
         args: Arguments to pass to the function
+        skill_context: Optional SkillContext to inject call_skill capability
         timeout_seconds: Maximum execution time in seconds
         max_memory_mb: Maximum memory usage in MB
         
@@ -152,6 +154,13 @@ def run_skill_sandboxed(
     try:
         skill_name = getattr(skill_func, "__name__", "unknown")
         logger.info(f"Running skill {skill_name} in sandbox")
+        
+        # Inject call_skill function into skill's execution environment if context provided
+        if skill_context and hasattr(skill_context, 'call_skill'):
+            if hasattr(skill_func, '__globals__'):
+                # Inject the call_skill function into the function's global namespace
+                skill_func.__globals__['call_skill'] = skill_context.call_skill
+                logger.debug(f"Injected call_skill into {skill_name}'s execution context")
         
         # TEMPORARY FIX: Execute directly without multiprocessing sandbox
         # to avoid pickling issues with dynamically created functions

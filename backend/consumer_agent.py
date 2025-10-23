@@ -1203,17 +1203,21 @@ Please analyze and fix the issue while maintaining the skill's core functionalit
             # Enhance the description with available skills context
             enhanced_description = skill_description
             if available_skills:
-                skills_context = "\n\nAvailable skills that can be called from this new skill:\n"
+                skills_context = "\n\nAvailable skills that can be called using call_skill():\n"
                 for skill in available_skills:
                     skills_context += f"- {skill['name']}: {skill.get('description', 'No description')}\n"
                     if 'inputSchema' in skill and 'properties' in skill['inputSchema']:
                         params = skill['inputSchema']['properties']
                         if params:
-                            param_info = ", ".join(f"{k}: {v.get('type', 'any')}" for k, v in params.items())
-                            skills_context += f"  Parameters: {param_info}\n"
+                            param_list = [f"{k}: {v.get('type', 'any')}" for k, v in params.items()]
+                            skills_context += f"  Parameters: {', '.join(param_list)}\n"
+                            # Add example usage
+                            example_params = ", ".join([f"{k}=value" for k in params.keys()])
+                            skills_context += f"  Usage: result = call_skill('{skill['name']}', {example_params})\n"
                 
                 enhanced_description += skills_context
-                enhanced_description += "\nNote: This skill should use existing skills when appropriate by calling them with proper parameters."
+                enhanced_description += "\n\nIMPORTANT: Use call_skill(name, **kwargs) to leverage existing skills rather than reimplementing their functionality."
+                enhanced_description += "\nExample: result = call_skill('calculator', operation='add', a=5, b=3)"
             
             # Get the configured OpenAI client and generation request
             openai_client = get_openai_client()

@@ -33,6 +33,73 @@ class SkillRegistrationError(Exception):
     pass
 
 
+class SkillContext:
+    """Execution context for skills with access to other skills.
+    
+    This context is injected into skill execution environments to allow
+    skills to call other skills in a controlled manner with protection
+    against circular dependencies and excessive recursion.
+    """
+    
+    def __init__(self, engine: 'SkillEngine', call_stack: Optional[List[str]] = None, max_call_depth: int = 5):
+        """Initialize skill execution context.
+        
+        Args:
+            engine: The SkillEngine instance that manages skills
+            call_stack: Current call stack to track nested calls
+            max_call_depth: Maximum allowed call depth to prevent runaway recursion
+        """
+        self._engine = engine
+        self._call_stack: List[str] = call_stack or []
+        self._max_call_depth = max_call_depth
+    
+    def call_skill(self, name: str, **kwargs) -> Any:
+        """Call another skill from within a skill.
+        
+        This function is injected into the skill's execution environment,
+        allowing skills to compose functionality by calling other registered skills.
+        
+        Args:
+            name: Name of the skill to call
+            **kwargs: Arguments to pass to the skill
+            
+        Returns:
+            The result from the called skill
+            
+        Raises:
+            SkillRuntimeError: If circular dependency detected or max depth exceeded
+            SkillNotFound: If the requested skill doesn't exist
+            
+        Example:
+            # Within a skill function
+            result = call_skill('calculator', operation='add', a=5, b=3)
+        """
+        # Check for circular dependencies
+        if name in self._call_stack:
+            call_chain = ' -> '.join(self._call_stack + [name])
+            raise SkillRuntimeError(
+                f"Circular dependency detected: {call_chain}"
+            )
+        
+        # Check max depth
+        if len(self._call_stack) >= self._max_call_depth:
+            call_chain = ' -> '.join(self._call_stack + [name])
+            raise SkillRuntimeError(
+                f"Max call depth ({self._max_call_depth}) exceeded: {call_chain}"
+            )
+        
+        # Track the call
+        new_call_stack = self._call_stack + [name]
+        logger.info(f"Skill calling skill: {' -> '.join(new_call_stack)}")
+        
+        try:
+            # Call the skill with the extended call stack
+            return self._engine._run_with_context(name, kwargs, new_call_stack)
+        except Exception as e:
+            logger.error(f"Skill call failed: {name} - {str(e)}")
+            raise
+
+
 class SkillEngine:
     """Registry for skills with simple register/list/run primitives with SQLite persistence.
 
@@ -131,12 +198,53 @@ class SkillEngine:
         return [meta for meta, _ in self._registry.values()]
 
     def run(self, name: str, args: dict[str, Any]) -> Any:
+        """Run a skill by name with the given arguments.
+        
+        This is the public entry point for skill execution. It creates a new
+        execution context with an empty call stack.
+        
+        Args:
+            name: Name of the skill to run
+            args: Arguments to pass to the skill
+            
+        Returns:
+            The result from the skill execution
+            
+        Raises:
+            SkillNotFound: If the skill doesn't exist
+            SkillRuntimeError: If execution fails
+        """
+        return self._run_with_context(name, args, call_stack=[])
+    
+    def _run_with_context(self, name: str, args: dict[str, Any], call_stack: List[str]) -> Any:
+        """Internal method to run a skill with a specific call stack context.
+        
+        This method is used both for top-level skill execution and for
+        nested skill calls via call_skill().
+        
+        Args:
+            name: Name of the skill to run
+            args: Arguments to pass to the skill
+            call_stack: Current call stack for tracking nested calls
+            
+        Returns:
+            The result from the skill execution
+            
+        Raises:
+            SkillNotFound: If the skill doesn't exist
+            SkillRuntimeError: If execution fails
+        """
         if name not in self._registry:
             raise SkillNotFound(name)
+        
         meta, func = self._registry[name]
+        
+        # Create execution context for this skill
+        context = SkillContext(self, call_stack, max_call_depth=5)
+        
         try:
-            # Run the function in a sandbox
-            return sandbox.run_skill_sandboxed(func, args)
+            # Run the function in a sandbox with the context
+            return sandbox.run_skill_sandboxed(func, args, skill_context=context)
         except sandbox.SandboxError as exc:
             # Wrap sandbox errors in SkillRuntimeError
             raise SkillRuntimeError(f"Skill {name} failed in sandbox: {str(exc)}")
