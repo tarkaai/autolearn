@@ -7,7 +7,7 @@ Unlike static MCP servers, AutoLearn introduces a **coding agent** that:
 - Decides automatically which workflows to crystalize.  
 - Updates its **MCP spec** dynamically so consuming agents can use new skills immediately.  
 
-[![AutoLearn Demo](https://github.com/tarkaai/autolearn/blob/a900df9a18ff6675fc904e7f51f37b3e450726df/video-thumbnail.png)](https://www.youtube.com/watch?v=s_9m4P9_6jc)
+[![AutoLearn Demo](https://github.com/autolearnai/autolearn/blob/a900df9a18ff6675fc904e7f51f37b3e450726df/video-thumbnail.png)](https://www.youtube.com/watch?v=s_9m4P9_6jc)
 
 Learn More: https://www.autolearn.dev/
 
@@ -300,4 +300,4 @@ This ensures that:
 
 ## License
 
-[MIT License](LICENSE.md) 2025 Tarka Ventures, Inc.
+[MIT License](LICENSE.md) 2025 AutoLearn
